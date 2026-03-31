@@ -7,9 +7,9 @@ import { format } from 'date-fns'
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
-  const { token } = params
+  const { token } = await params
 
   const session = await getServerSession(authOptions)
   const accessToken = session?.accessToken

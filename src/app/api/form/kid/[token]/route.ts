@@ -7,9 +7,9 @@ import { format } from 'date-fns'
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
-  const { token } = params
+  const { token } = await params
 
   // Need an access token to read Sheets + Calendar
   // For form pages we use the admin's stored session
