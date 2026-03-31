@@ -371,6 +371,24 @@ export default function MeetingPage() {
                                   const sc = STATUS_COLORS[status] ?? STATUS_COLORS.unset
                                   const firstMember = members.find(m => m.id === evt.involvedIds?.[0])
                                   const driver = members.find(m => m.id === evt.driverId)
+                                  const isSchool = evt.id?.startsWith('school_')
+                                  const isSchoolDrop = evt.id?.startsWith('school_drop_')
+
+                                  // Get available adults for school events from submissions
+                                  let schoolAvailable = []
+                                  if (isSchool && !evt.driverId) {
+                                    const slot = isSchoolDrop ? 'am' : 'pm'
+                                    schoolAvailable = submissions
+                                      .filter(s => {
+                                        const sa = s.payload?.schoolAvailability
+                                        if (!sa) return false
+                                        const dayName = WEEK[evt.dayIdx]
+                                        return sa[dayName]?.[slot] === true
+                                      })
+                                      .map(s => members.find(m => m.id === s.memberId)?.name)
+                                      .filter(Boolean)
+                                  }
+
                                   return (
                                     <div key={evt.id} className="chip"
                                       onClick={() => setSelectedEvt(selectedEvt === evt.id ? null : evt.id)}
@@ -380,6 +398,14 @@ export default function MeetingPage() {
                                       {evt.transportStatus === 'needs_driver' && (
                                         <div style={{ fontSize:9, marginTop:2, color: evt.driverId?'#15803D':'#D97706', fontWeight:600 }}>
                                           {evt.driverId ? `🚗 ${driver?.name}` : '⚠ No driver'}
+                                        </div>
+                                      )}
+                                      {evt.transportStatus === 'no_transport' && (
+                                        <div style={{ fontSize:9, marginTop:2, color:'#15803D', fontWeight:500 }}>✓ No transport needed</div>
+                                      )}
+                                      {isSchool && !evt.driverId && schoolAvailable.length > 0 && (
+                                        <div style={{ fontSize:9, marginTop:3, color:'#1D4ED8', fontWeight:600 }}>
+                                          Available: {schoolAvailable.join(', ')}
                                         </div>
                                       )}
                                     </div>
