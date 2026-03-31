@@ -865,6 +865,5 @@ export default function AdminSetupClient() {
 
       </div>
     </div>
-  </div>
   )
 }
