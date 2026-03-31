@@ -10,13 +10,13 @@ import { FAMILY_MEMBERS, ADULTS, KIDS, getMember } from '@/lib/family'
 
 // ─── Week display helpers ─────────────────────────────────────
 const WEEK_LABELS = [
+  { label: 'Sunday',    short: 'Sun' },
   { label: 'Monday',    short: 'Mon' },
   { label: 'Tuesday',   short: 'Tue' },
   { label: 'Wednesday', short: 'Wed' },
   { label: 'Thursday',  short: 'Thu' },
   { label: 'Friday',    short: 'Fri' },
   { label: 'Saturday',  short: 'Sat' },
-  { label: 'Sunday',    short: 'Sun' },
 ]
 
 const STATUS_META = {
@@ -49,6 +49,8 @@ export default function AdminSetupClient() {
   const [lastSynced,  setLastSynced]  = useState<string | null>(null)
   const [weekLabel,   setWeekLabel]   = useState('This Week')
   const [weekDates,   setWeekDates]   = useState<string[]>(WEEK_LABELS.map(() => ''))
+  const [weekOffset,  setWeekOffset]  = useState(0)   // 0 = this week, 1 = next week, etc.
+  const [futureOpen,  setFutureOpen]  = useState(false)
   const [syncError,   setSyncError]   = useState<string | null>(null)
   const [rulesOpen,   setRulesOpen]   = useState(false)
   const [addRuleOpen, setAddRuleOpen] = useState(false)
@@ -56,32 +58,59 @@ export default function AdminSetupClient() {
   const [selectedId,  setSelectedId]  = useState<string | null>(null)
 
   // ─── Sync with Google Calendar ──────────────────────────────
-  const handleSync = useCallback(async () => {
+  const handleSync = useCallback(async (offset: number = weekOffset) => {
     setSyncing(true)
     setSyncError(null)
     try {
-      const res = await fetch('/api/calendar')
+      const res = await fetch(`/api/calendar?weekOffset=${offset}`)
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
       const data = await res.json()
 
-      // Apply standing rules to incoming events
-      const eventsWithRules = (data.events as CalendarEvent[]).map(evt => {
-        const matchingRule = rules.find(r =>
-          !r.overrideThisWeek &&
-          evt.title.toLowerCase().includes(getMember(r.passengerId)?.name.toLowerCase() ?? '')
-        )
-        if (matchingRule) {
-          return {
-            ...evt,
-            transportStatus: 'needs_driver' as const,
-            driverId: matchingRule.driverId,
-            standingRuleId: matchingRule.id,
+      // Merge incoming events with existing assignments
+      // so that transport/driver/people data is preserved on re-sync
+      setEvents(prev => {
+        const incoming = data.events as CalendarEvent[]
+        return incoming.map(evt => {
+          // Find a matching existing event by id or by title+dayIdx
+          const existing = prev.find(e => e.id === evt.id) ??
+                           prev.find(e => e.title === evt.title && e.dayIdx === evt.dayIdx)
+
+          // Apply standing rules if no existing assignment
+          const matchingRule = rules.find(r =>
+            !r.overrideThisWeek &&
+            evt.title.toLowerCase().includes(getMember(r.passengerId)?.name.toLowerCase() ?? '')
+          )
+
+          if (existing && (
+            existing.involvedIds.length > 0 ||
+            existing.transportStatus !== 'unset' ||
+            existing.driverId
+          )) {
+            // Preserve all admin-set fields, just update time/location from calendar
+            return {
+              ...existing,
+              id:       evt.id,
+              time:     evt.time,
+              sortMin:  evt.sortMin,
+              location: evt.location,
+              allDay:   evt.allDay,
+            }
           }
-        }
-        return evt
+
+          // New event — apply standing rule if applicable
+          if (matchingRule) {
+            return {
+              ...evt,
+              transportStatus: 'needs_driver' as const,
+              driverId:        matchingRule.driverId,
+              standingRuleId:  matchingRule.id,
+            }
+          }
+
+          return evt
+        })
       })
 
-      setEvents(eventsWithRules)
       setLastSynced(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
 
       // Build week date display strings from weekStart
@@ -93,14 +122,15 @@ export default function AdminSetupClient() {
           return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
         })
         setWeekDates(dates)
-        setWeekLabel(`Week of ${dates[0]}`)
+        const offsetLabel = offset === 0 ? 'This Week' : offset === 1 ? 'Next Week' : `In ${offset} Weeks`
+        setWeekLabel(`${offsetLabel} · ${dates[0]}`)
       }
     } catch (err) {
       setSyncError(err instanceof Error ? err.message : 'Sync failed')
     } finally {
       setSyncing(false)
     }
-  }, [rules])
+  }, [rules, weekOffset])
 
   // ─── Event handlers ─────────────────────────────────────────
   const setTransportStatus = (id: string, status: CalendarEvent['transportStatus']) =>
@@ -562,6 +592,65 @@ export default function AdminSetupClient() {
                 <button style={{ ...s.btnSec, marginTop: 12, fontSize: 12 }} onClick={() => setAddRuleOpen(true)}>
                   <Plus size={12} /> Add standing rule
                 </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── PLAN AHEAD ────────────────────────────────────────── */}
+        <div style={s.card}>
+          <button onClick={() => setFutureOpen(o => !o)}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Calendar size={15} style={{ color: '#8B8599' }} />
+              <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, fontWeight: 600, color: '#1A1A2E' }}>Plan Ahead</span>
+              {weekOffset > 0 && (
+                <span style={{ fontSize: 11, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>
+                  {weekOffset === 1 ? 'Viewing next week' : `Viewing +${weekOffset} weeks`}
+                </span>
+              )}
+            </div>
+            {futureOpen ? <ChevronUp size={15} color="#8B8599" /> : <ChevronDown size={15} color="#8B8599" />}
+          </button>
+          {futureOpen && (
+            <div style={{ padding: '0 20px 20px', borderTop: '1px solid #F0EDE8' }}>
+              <p style={{ fontSize: 13, color: '#8B8599', margin: '12px 0 16px', lineHeight: 1.5 }}>
+                Load a future week's calendar to plan ahead. Your current week's work is saved — switching weeks starts fresh.
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {[
+                  { label: 'This Week',   offset: 0 },
+                  { label: 'Next Week',   offset: 1 },
+                  { label: 'In 2 Weeks',  offset: 2 },
+                  { label: 'In 3 Weeks',  offset: 3 },
+                ].map(opt => (
+                  <button key={opt.offset}
+                    onClick={() => {
+                      setWeekOffset(opt.offset)
+                      setEvents([])
+                      setSelectedId(null)
+                      handleSync(opt.offset)
+                    }}
+                    style={{
+                      padding: '9px 16px',
+                      borderRadius: 8,
+                      fontSize: 13,
+                      fontWeight: weekOffset === opt.offset ? 700 : 500,
+                      cursor: 'pointer',
+                      fontFamily: "'DM Sans',sans-serif",
+                      border: `1.5px solid ${weekOffset === opt.offset ? '#1D4ED8' : '#DDD8CF'}`,
+                      background: weekOffset === opt.offset ? '#EFF6FF' : '#fff',
+                      color: weekOffset === opt.offset ? '#1D4ED8' : '#4A4A5A',
+                      transition: 'all 0.12s',
+                    }}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {weekOffset > 0 && (
+                <div style={{ marginTop: 12, padding: '10px 14px', background: '#FFFBEB', borderRadius: 8, border: '1px solid #FDE68A', fontSize: 13, color: '#92400E' }}>
+                  ⚠ You're viewing a future week. Forms will only go out for the current week's setup.
+                </div>
               )}
             </div>
           )}
