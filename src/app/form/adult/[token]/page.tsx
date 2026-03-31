@@ -11,6 +11,9 @@ const TIMES = ['Morning','7:00 AM','8:00 AM','9:00 AM','10:00 AM','11:00 AM','No
 
 function emptyEvent() { return { id: Date.now(), what:'', day:'', time:'', where:'' } }
 
+const SCHOOL_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday']
+type SchoolSlot = 'am' | 'pm' | 'both' | 'neither' | null
+
 export default function AdultFormPage() {
   const params = useParams()
   const token  = params?.token as string
@@ -28,6 +31,10 @@ export default function AdultFormPage() {
   const [offEvents,    setOffEvents]    = useState<ReturnType<typeof emptyEvent>[]>([])
   const [topics,       setTopics]       = useState<string[]>([])
   const [newTopic,     setNewTopic]     = useState('')
+  // School driving availability: per day, AM / PM / Both / Neither
+  const [schoolAvail,  setSchoolAvail]  = useState<Record<string, SchoolSlot>>(
+    Object.fromEntries(SCHOOL_DAYS.map(d => [d, null]))
+  )
 
   useEffect(() => {
     async function load() {
@@ -72,7 +79,7 @@ export default function AdultFormPage() {
     setSubmitting(true)
     const drivingResponses: Record<string, boolean | null> = {}
     driveEvents.forEach(e => { drivingResponses[e.id] = e.canDrive })
-    const payload = { drivingResponses, unavailableDays: unavailable, offCalendarEvents: offEvents, meetingTopics: topics }
+    const payload = { drivingResponses, unavailableDays: unavailable, offCalendarEvents: offEvents, meetingTopics: topics, schoolAvailability: schoolAvail }
     try {
       await fetch('/api/submit/adult', {
         method: 'POST',
@@ -155,52 +162,100 @@ export default function AdultFormPage() {
       <div style={{ maxWidth:480, margin:'0 auto', padding:'20px 16px 48px', display:'flex', flexDirection:'column', gap:14 }}>
 
         {/* Driving availability */}
-        {driveEvents.length > 0 && (
-          <div className="card">
-            <div style={{ padding:'15px 18px', borderBottom:'1px solid #F5F2EC', display:'flex', alignItems:'center', gap:8 }}>
-              <Car size={15} style={{ color:'#C4522A' }} />
-              <span style={{ fontSize:15, fontWeight:700, color:'#1A1A2E' }}>Driving availability</span>
-              {unanswered.length > 0
-                ? <span style={{ marginLeft:'auto', fontSize:11, background:'#FFFBEB', color:'#D97706', border:'1px solid #FDE68A', padding:'2px 8px', borderRadius:10, fontWeight:600 }}>{unanswered.length} need{unanswered.length===1?'s':''} a response</span>
-                : <span style={{ marginLeft:'auto', fontSize:11, background:'#F0FDF4', color:'#16A34A', border:'1px solid #BBF7D0', padding:'2px 8px', borderRadius:10, fontWeight:600 }}>All answered ✓</span>
-              }
-            </div>
-            <div style={{ padding:'14px 18px', display:'flex', flexDirection:'column', gap:10 }}>
-              {driveEvents.map(evt => {
-                if (evt.standingRule) return (
-                  <div key={evt.id} style={{ padding:'12px 14px', background:'#F0FDF4', borderRadius:10, border:'1px solid #BBF7D0', display:'flex', alignItems:'flex-start', gap:10 }}>
-                    <Lock size={13} style={{ color:'#16A34A', marginTop:2, flexShrink:0 }} />
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontSize:13, fontWeight:600, color:'#166534' }}>{evt.title}</div>
-                      <div style={{ fontSize:12, color:'#15803D', opacity:0.8, marginTop:1 }}>{evt.day} · {evt.time} · {evt.location}</div>
-                    </div>
-                    <span style={{ fontSize:11, background:'#DCFCE7', color:'#166534', padding:'3px 8px', borderRadius:6, fontWeight:700, flexShrink:0 }}>You drive</span>
+        <div className="card">
+          <div style={{ padding:'15px 18px', borderBottom:'1px solid #F5F2EC', display:'flex', alignItems:'center', gap:8 }}>
+            <Car size={15} style={{ color:'#C4522A' }} />
+            <span style={{ fontSize:15, fontWeight:700, color:'#1A1A2E' }}>Driving availability</span>
+            {driveEvents.length > 0 && (unanswered.length > 0
+              ? <span style={{ marginLeft:'auto', fontSize:11, background:'#FFFBEB', color:'#D97706', border:'1px solid #FDE68A', padding:'2px 8px', borderRadius:10, fontWeight:600 }}>{unanswered.length} need{unanswered.length===1?'s':''} a response</span>
+              : <span style={{ marginLeft:'auto', fontSize:11, background:'#F0FDF4', color:'#16A34A', border:'1px solid #BBF7D0', padding:'2px 8px', borderRadius:10, fontWeight:600 }}>All answered ✓</span>
+            )}
+          </div>
+          <div style={{ padding:'14px 18px', display:'flex', flexDirection:'column', gap:10 }}>
+            {driveEvents.length === 0 && (
+              <p style={{ fontSize:13, color:'#8B8599', fontStyle:'italic' }}>
+                No transport assignments have been set up yet for this week. The admin will assign these — check back after the admin setup is complete.
+              </p>
+            )}
+            {driveEvents.map(evt => {
+              if (evt.standingRule) return (
+                <div key={evt.id} style={{ padding:'12px 14px', background:'#F0FDF4', borderRadius:10, border:'1px solid #BBF7D0', display:'flex', alignItems:'flex-start', gap:10 }}>
+                  <Lock size={13} style={{ color:'#16A34A', marginTop:2, flexShrink:0 }} />
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13, fontWeight:600, color:'#166534' }}>{evt.title}</div>
+                    <div style={{ fontSize:12, color:'#15803D', opacity:0.8, marginTop:1 }}>{evt.day} · {evt.time} · {evt.location}</div>
                   </div>
-                )
-                const yes = evt.canDrive === true
-                const no  = evt.canDrive === false
+                  <span style={{ fontSize:11, background:'#DCFCE7', color:'#166534', padding:'3px 8px', borderRadius:6, fontWeight:700, flexShrink:0 }}>You drive</span>
+                </div>
+              )
+              const yes = evt.canDrive === true
+              const no  = evt.canDrive === false
+              return (
+                <div key={evt.id} className="fade-in" style={{ padding:14, background: yes?'#F0FDF4':no?'#FEF2F2':'#FAFAF7', borderRadius:10, border:`1.5px solid ${yes?'#BBF7D0':no?'#FECACA':'#EDE8E0'}`, transition:'all 0.15s' }}>
+                  <div style={{ marginBottom:10 }}>
+                    <div style={{ fontSize:14, fontWeight:600, color:'#1A1A2E' }}>{evt.title}</div>
+                    <div style={{ fontSize:12, color:'#8B8599', marginTop:2 }}>{evt.day} · {evt.time} · {evt.location}</div>
+                  </div>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <button onClick={() => setDriveResponse(evt.id, true)}
+                      style={{ flex:1, padding:'9px 12px', borderRadius:8, border:`1.5px solid ${yes?'#86EFAC':'#E2DDD6'}`, background:yes?'#16A34A':'#fff', color:yes?'#fff':'#4A4A5A', fontSize:13, fontWeight:yes?700:500, cursor:'pointer', fontFamily:"'DM Sans',sans-serif", transition:'all 0.12s' }}>
+                      ✓ Yes, I can drive
+                    </button>
+                    <button onClick={() => setDriveResponse(evt.id, false)}
+                      style={{ flex:1, padding:'9px 12px', borderRadius:8, border:`1.5px solid ${no?'#FECACA':'#E2DDD6'}`, background:no?'#DC2626':'#fff', color:no?'#fff':'#4A4A5A', fontSize:13, fontWeight:no?700:500, cursor:'pointer', fontFamily:"'DM Sans',sans-serif", transition:'all 0.12s' }}>
+                      ✗ No, I can't
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* School driving availability */}
+        <div className="card">
+          <div style={{ padding:'15px 18px', borderBottom:'1px solid #F5F2EC', display:'flex', alignItems:'center', gap:8 }}>
+            <span style={{ fontSize:15 }}>🏫</span>
+            <span style={{ fontSize:15, fontWeight:700, color:'#1A1A2E' }}>School driving this week</span>
+          </div>
+          <div style={{ padding:'14px 18px' }}>
+            <p style={{ fontSize:13, color:'#8B8599', marginBottom:14, lineHeight:1.5 }}>
+              Boston, Hailee, and Sadie need rides to and from school. For each day, let us know if you can do the morning drop-off, afternoon pick-up, both, or neither.
+            </p>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              {SCHOOL_DAYS.map(day => {
+                const val = schoolAvail[day]
+                const opts: Array<{ v: SchoolSlot; label: string; short: string }> = [
+                  { v: 'am',      label: 'AM Drop-off',  short: 'AM'    },
+                  { v: 'pm',      label: 'PM Pick-up',   short: 'PM'    },
+                  { v: 'both',    label: 'Both',         short: 'Both'  },
+                  { v: 'neither', label: 'Neither',      short: '✗'     },
+                ]
                 return (
-                  <div key={evt.id} className="fade-in" style={{ padding:14, background: yes?'#F0FDF4':no?'#FEF2F2':'#FAFAF7', borderRadius:10, border:`1.5px solid ${yes?'#BBF7D0':no?'#FECACA':'#EDE8E0'}`, transition:'all 0.15s' }}>
-                    <div style={{ marginBottom:10 }}>
-                      <div style={{ fontSize:14, fontWeight:600, color:'#1A1A2E' }}>{evt.title}</div>
-                      <div style={{ fontSize:12, color:'#8B8599', marginTop:2 }}>{evt.day} · {evt.time} · {evt.location}</div>
-                    </div>
-                    <div style={{ display:'flex', gap:8 }}>
-                      <button onClick={() => setDriveResponse(evt.id, true)}
-                        style={{ flex:1, padding:'9px 12px', borderRadius:8, border:`1.5px solid ${yes?'#86EFAC':'#E2DDD6'}`, background:yes?'#16A34A':'#fff', color:yes?'#fff':'#4A4A5A', fontSize:13, fontWeight:yes?700:500, cursor:'pointer', fontFamily:"'DM Sans',sans-serif", transition:'all 0.12s' }}>
-                        ✓ Yes, I can drive
-                      </button>
-                      <button onClick={() => setDriveResponse(evt.id, false)}
-                        style={{ flex:1, padding:'9px 12px', borderRadius:8, border:`1.5px solid ${no?'#FECACA':'#E2DDD6'}`, background:no?'#DC2626':'#fff', color:no?'#fff':'#4A4A5A', fontSize:13, fontWeight:no?700:500, cursor:'pointer', fontFamily:"'DM Sans',sans-serif", transition:'all 0.12s' }}>
-                        ✗ No, I can't
-                      </button>
+                  <div key={day} style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <span style={{ fontSize:13, fontWeight:600, color:'#1A1A2E', minWidth:80 }}>{day}</span>
+                    <div style={{ display:'flex', gap:6, flex:1, flexWrap:'wrap' }}>
+                      {opts.map(opt => {
+                        const active = val === opt.v
+                        return (
+                          <button key={opt.v}
+                            onClick={() => setSchoolAvail(s => ({ ...s, [day]: active ? null : opt.v }))}
+                            style={{ padding:'6px 12px', borderRadius:7, fontSize:12, fontWeight: active ? 700 : 400, cursor:'pointer', fontFamily:"'DM Sans',sans-serif", transition:'all 0.12s',
+                              background: active ? (opt.v === 'neither' ? '#FEF2F2' : '#F0FDF4') : '#fff',
+                              border: `1.5px solid ${active ? (opt.v === 'neither' ? '#FECACA' : '#BBF7D0') : '#E2DDD6'}`,
+                              color: active ? (opt.v === 'neither' ? '#DC2626' : '#166534') : '#8B8599',
+                            }}>
+                            {opt.label}
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
                 )
               })}
             </div>
           </div>
-        )}
+        </div>
 
         {/* Unavailable days */}
         <div className="card">

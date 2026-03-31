@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getToken, getFamilyMembers } from '@/lib/sheets'
-import { getWeekCalendarEvents } from '@/lib/google-calendar'
+import { getWeekCalendarEvents, getWeekRange } from '@/lib/google-calendar'
+import { google } from 'googleapis'
 import { format } from 'date-fns'
+
+const SHEETS_ID = process.env.GOOGLE_SHEETS_ID!
+const WEEK_DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
 
 export async function GET(
   req: NextRequest,
@@ -32,35 +36,70 @@ export async function GET(
       return NextResponse.json({ error: 'Member not found' }, { status: 404 })
     }
 
-    // 3. Get calendar events
-    const calendarId = process.env.GOOGLE_CALENDAR_ID ?? 'primary'
-    const { events, weekStart, weekEnd } = await getWeekCalendarEvents(accessToken, calendarId)
+    // 3. Load saved admin state (has transport assignments set by admin)
+    const weekStart = tokenRecord.weekStart
+    let adminEvents: any[] = []
+    try {
+      const auth = new google.auth.OAuth2()
+      auth.setCredentials({ access_token: accessToken })
+      const sheets = google.sheets({ version: 'v4', auth })
+      const res = await sheets.spreadsheets.values.get({
+        spreadsheetId: SHEETS_ID,
+        range: 'AdminState!A2:C200',
+      })
+      const rows = (res.data.values ?? []) as string[][]
+      const row = rows
+        .filter(r => r[0] === weekStart)
+        .sort((a, b) => b[1].localeCompare(a[1]))[0]
+      if (row?.[2]) {
+        const state = JSON.parse(row[2])
+        adminEvents = state.events ?? []
+      }
+    } catch (err) {
+      console.warn('Could not load admin state, falling back to calendar:', err)
+    }
 
-    const weekLabel = `Week of ${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`
-    const WEEK_DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+    // 4. If no admin state, fall back to raw calendar
+    let events = adminEvents
+    let weekStartDate: Date
+    let weekEndDate: Date
 
-    // 4. Events that need driving (transport = needs_driver)
+    if (events.length === 0) {
+      const calendarId = process.env.GOOGLE_CALENDAR_ID ?? 'primary'
+      const result = await getWeekCalendarEvents(accessToken, calendarId)
+      events = result.events
+      weekStartDate = result.weekStart
+      weekEndDate   = result.weekEnd
+    } else {
+      const range = getWeekRange(new Date(weekStart + 'T00:00:00'))
+      weekStartDate = range.weekStart
+      weekEndDate   = range.weekEnd
+    }
+
+    const weekLabel = `Week of ${format(weekStartDate, 'MMM d')} – ${format(weekEndDate, 'MMM d, yyyy')}`
+
+    // 5. Events that need driving
     const driveEvents = events
-      .filter(e => e.transportStatus === 'needs_driver')
-      .map(e => ({
+      .filter((e: any) => e.transportStatus === 'needs_driver')
+      .map((e: any) => ({
         id:          e.id,
         title:       e.title,
         day:         WEEK_DAYS[e.dayIdx],
         time:        e.time,
         location:    e.location ?? '',
-        standingRule: e.standingRuleId !== null && e.driverId === member.id,
+        standingRule: e.standingRuleId != null && e.driverId === member.id,
       }))
 
-    // 5. All calendar events for awareness
-    const allCalEvents = events.map(e => ({
-      title:    e.title,
-      day:      WEEK_DAYS[e.dayIdx],
-      time:     e.time,
-      note:     e.driverId === member.id
-                  ? 'You driving'
-                  : e.transportStatus === 'needs_driver' && !e.driverId
-                  ? 'Driver needed'
-                  : '',
+    // 6. All events for awareness
+    const allCalEvents = events.map((e: any) => ({
+      title: e.title,
+      day:   WEEK_DAYS[e.dayIdx],
+      time:  e.time,
+      note:  e.driverId === member.id
+               ? 'You driving'
+               : e.transportStatus === 'needs_driver' && !e.driverId
+               ? 'Driver needed'
+               : '',
     }))
 
     return NextResponse.json({
