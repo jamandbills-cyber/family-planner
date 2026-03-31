@@ -78,9 +78,9 @@ export async function GET(
 
     const weekLabel = `Week of ${format(weekStartDate, 'MMM d')} – ${format(weekEndDate, 'MMM d, yyyy')}`
 
-    // 5. Events that need driving
+    // 5. Events that need driving — only unassigned ones, exclude school events
     const driveEvents = events
-      .filter((e: any) => e.transportStatus === 'needs_driver')
+      .filter((e: any) => e.transportStatus === 'needs_driver' && !e.driverId && !e.id?.startsWith('school_'))
       .map((e: any) => ({
         id:          e.id,
         title:       e.title,
