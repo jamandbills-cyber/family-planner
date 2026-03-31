@@ -46,11 +46,13 @@ const DEFAULT_SCHOOL = {
 
 // ─── Test Links Panel ─────────────────────────────────────────
 function TestLinksPanel({ weekStartKey }: { weekStartKey: string | null }) {
-  const [open,    setOpen]    = useState(false)
-  const [status,  setStatus]  = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
-  const [links,   setLinks]   = useState<Array<{ name: string; type: string; url: string }>>([])
-  const [errMsg,  setErrMsg]  = useState('')
-  const [copied,  setCopied]  = useState<string | null>(null)
+  const [open,       setOpen]       = useState(false)
+  const [status,     setStatus]     = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
+  const [emailStatus,setEmailStatus]= useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const [links,      setLinks]      = useState<Array<{ name: string; type: string; url: string }>>([])
+  const [emailResult,setEmailResult]= useState<{ sent: string[]; failed: string[] } | null>(null)
+  const [errMsg,     setErrMsg]     = useState('')
+  const [copied,     setCopied]     = useState<string | null>(null)
 
   const generate = async () => {
     if (!weekStartKey) return
@@ -72,6 +74,24 @@ function TestLinksPanel({ weekStartKey }: { weekStartKey: string | null }) {
     }
   }
 
+  const sendEmails = async () => {
+    if (!weekStartKey) return
+    setEmailStatus('sending')
+    try {
+      const res = await fetch('/api/send-form-emails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weekStart: weekStartKey }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setEmailResult({ sent: data.sent ?? [], failed: data.failed ?? [] })
+      setEmailStatus('sent')
+    } catch {
+      setEmailStatus('error')
+    }
+  }
+
   const copyLink = (url: string, name: string) => {
     navigator.clipboard.writeText(url)
     setCopied(name)
@@ -84,31 +104,67 @@ function TestLinksPanel({ weekStartKey }: { weekStartKey: string | null }) {
         style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 16 }}>🔗</span>
-          <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, fontWeight: 600, color: '#1A1A2E' }}>Test Form Links</span>
-          <span style={{ fontSize: 11, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>Skip SMS</span>
+          <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, fontWeight: 600, color: '#1A1A2E' }}>Send Form Links</span>
+          {emailStatus === 'sent' && <span style={{ fontSize: 11, background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>Emails sent ✓</span>}
         </div>
         {open ? <ChevronUp size={15} color="#8B8599" /> : <ChevronDown size={15} color="#8B8599" />}
       </button>
       {open && (
         <div style={{ padding: '0 20px 20px', borderTop: '1px solid #F0EDE8' }}>
-          <p style={{ fontSize: 13, color: '#8B8599', margin: '12px 0 16px', lineHeight: 1.5 }}>
-            Generate form links for everyone without sending texts. Use these to test submissions or share links manually while Twilio registration is pending.
+          <p style={{ fontSize: 13, color: '#8B8599', margin: '12px 0 14px', lineHeight: 1.5 }}>
+            Send each family member their unique form link via email. Or generate links to share manually.
           </p>
+
+          {/* Email send button — primary action */}
+          <div style={{ marginBottom: 14 }}>
+            {emailStatus === 'idle' || emailStatus === 'error' ? (
+              <button onClick={sendEmails} disabled={!weekStartKey}
+                style={{ width: '100%', background: '#C4522A', color: '#fff', border: 'none', borderRadius: 9, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: weekStartKey ? 1 : 0.5 }}>
+                ✉ Email Form Links to Everyone
+              </button>
+            ) : emailStatus === 'sending' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#8B8599', padding: '10px 0' }}>
+                <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Sending emails…
+              </div>
+            ) : (
+              <div style={{ padding: '10px 14px', background: '#F0FDF4', borderRadius: 8, border: '1px solid #BBF7D0', fontSize: 13 }}>
+                <div style={{ color: '#15803D', fontWeight: 600, marginBottom: emailResult?.failed.length ? 4 : 0 }}>
+                  ✓ Emails sent to {emailResult?.sent.length} people: {emailResult?.sent.join(', ')}
+                </div>
+                {emailResult?.failed && emailResult.failed.length > 0 && (
+                  <div style={{ color: '#DC2626', fontSize: 12, marginTop: 3 }}>
+                    Failed: {emailResult.failed.join(', ')}
+                  </div>
+                )}
+              </div>
+            )}
+            {emailStatus === 'error' && (
+              <p style={{ fontSize: 12, color: '#DC2626', marginTop: 6 }}>Failed to send emails. Check Gmail API scope — sign out and back in.</p>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <div style={{ flex: 1, height: 1, background: '#F0EDE8' }} />
+            <span style={{ fontSize: 11, color: '#8B8599' }}>or get links manually</span>
+            <div style={{ flex: 1, height: 1, background: '#F0EDE8' }} />
+          </div>
+
           {status === 'idle' && (
             <button onClick={generate} disabled={!weekStartKey}
-              style={{ background: '#1D4ED8', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", display: 'flex', alignItems: 'center', gap: 7, opacity: weekStartKey ? 1 : 0.5 }}>
-              <Plus size={14} /> Generate Form Links
+              style={{ background: '#F7F4EF', color: '#4A4A5A', border: '1.5px solid #E2DDD6', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", display: 'flex', alignItems: 'center', gap: 7, opacity: weekStartKey ? 1 : 0.5 }}>
+              <Plus size={13} /> Generate Links
             </button>
           )}
           {status === 'loading' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#8B8599' }}>
-              <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Generating links…
+              <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Generating…
             </div>
           )}
           {status === 'error' && (
-            <div style={{ padding: '10px 14px', background: '#FEF2F2', borderRadius: 8, border: '1px solid #FECACA', fontSize: 13, color: '#DC2626', marginBottom: 10 }}>
-              ⚠ {errMsg || 'Failed to generate links'}
-              <button onClick={generate} style={{ marginLeft: 8, background: 'none', border: 'none', color: '#DC2626', cursor: 'pointer', textDecoration: 'underline', fontSize: 12, fontFamily: "'DM Sans',sans-serif" }}>Try again</button>
+            <div style={{ padding: '10px 14px', background: '#FEF2F2', borderRadius: 8, border: '1px solid #FECACA', fontSize: 13, color: '#DC2626' }}>
+              ⚠ {errMsg}
+              <button onClick={generate} style={{ marginLeft: 8, background: 'none', border: 'none', color: '#DC2626', cursor: 'pointer', textDecoration: 'underline', fontSize: 12, fontFamily: "'DM Sans',sans-serif" }}>Retry</button>
             </div>
           )}
           {status === 'done' && links.length > 0 && (
@@ -122,11 +178,11 @@ function TestLinksPanel({ weekStartKey }: { weekStartKey: string | null }) {
                       {type === 'adult' ? '👩 Adults' : '🧒 Kids'}
                     </div>
                     {group.map(link => (
-                      <div key={link.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: '#F7F4EF', borderRadius: 8, marginBottom: 6 }}>
+                      <div key={link.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: '#F7F4EF', borderRadius: 8, marginBottom: 5 }}>
                         <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', minWidth: 70 }}>{link.name}</span>
                         <span style={{ fontSize: 11, color: '#8B8599', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link.url}</span>
                         <a href={link.url} target="_blank" rel="noreferrer"
-                          style={{ fontSize: 12, color: '#1D4ED8', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap', padding: '4px 8px', background: '#EFF6FF', borderRadius: 5 }}>
+                          style={{ fontSize: 12, color: '#1D4ED8', fontWeight: 600, textDecoration: 'none', padding: '4px 8px', background: '#EFF6FF', borderRadius: 5, whiteSpace: 'nowrap' }}>
                           Open ↗
                         </a>
                         <button onClick={() => copyLink(link.url, link.name)}
@@ -135,18 +191,111 @@ function TestLinksPanel({ weekStartKey }: { weekStartKey: string | null }) {
                         </button>
                       </div>
                     ))}
-                    <button onClick={generate}
-                      style={{ fontSize: 12, color: '#8B8599', background: 'none', border: '1px solid #DDD8CF', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", marginTop: 4 }}>
-                      ↺ Regenerate
-                    </button>
                   </div>
                 )
               })}
+              <button onClick={generate} style={{ fontSize: 12, color: '#8B8599', background: 'none', border: '1px solid #DDD8CF', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", alignSelf: 'flex-start' }}>
+                ↺ Regenerate
+              </button>
             </div>
           )}
         </div>
       )}
     </div>
+  )
+}
+
+// ─── Preview Plan ─────────────────────────────────────────────
+function PreviewPlan({ events, dinner, agenda, weekLabel, members }: any) {
+  const [open, setOpen] = useState(false)
+  const WEEK = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+
+  return (
+    <>
+      <button onClick={() => setOpen(true)}
+        style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', background: '#F7F4EF', border: '1.5px solid #E2DDD6', borderRadius: 9, fontSize: 13, fontWeight: 600, color: '#4A4A5A', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif" }}>
+        👁 Preview Plan
+      </button>
+
+      {open && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, overflowY: 'auto', padding: '24px 16px' }}
+          onClick={e => { if (e.target === e.currentTarget) setOpen(false) }}>
+          <div style={{ maxWidth: 600, margin: '0 auto', background: '#fff', borderRadius: 16, overflow: 'hidden' }}>
+            {/* Header */}
+            <div style={{ background: '#1A1A2E', padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: 11, color: '#7070A0', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Draft Preview</div>
+                <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, fontWeight: 700, color: '#fff' }}>{weekLabel}</div>
+              </div>
+              <button onClick={() => setOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', padding: 4 }}>✕</button>
+            </div>
+
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+              {/* Schedule */}
+              {WEEK.map((day, dayIdx) => {
+                const dayEvts = events.filter((e: any) => e.dayIdx === dayIdx && e.transportStatus !== 'unset')
+                const din     = dinner.find((d: any) => d.dayIdx === dayIdx) ?? { meal: '', cook: '' }
+                if (!dayEvts.length && !din.meal) return null
+                return (
+                  <div key={day}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E', marginBottom: 8, paddingBottom: 4, borderBottom: '2px solid #E8E3DB' }}>{day}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {dayEvts.map((evt: any) => {
+                        const driver = members.find((m: any) => m.id === evt.driverId)
+                        return (
+                          <div key={evt.id} style={{ display: 'flex', gap: 10, padding: '8px 12px', background: '#FAFAF7', borderRadius: 8, border: '1px solid #EDE8E0', borderLeft: `3px solid ${evt.transportStatus === 'needs_driver' ? '#C4522A' : '#E2DDD6'}` }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>{evt.title}</div>
+                              <div style={{ fontSize: 12, color: '#8B8599' }}>{evt.time}</div>
+                            </div>
+                            {driver && (
+                              <div style={{ fontSize: 12, color: '#C4522A', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                🚗 {driver.name}
+                              </div>
+                            )}
+                            {evt.transportStatus === 'needs_driver' && !driver && (
+                              <div style={{ fontSize: 11, color: '#D97706', fontWeight: 600 }}>⚠ No driver</div>
+                            )}
+                          </div>
+                        )
+                      })}
+                      {din.meal && (
+                        <div style={{ padding: '8px 12px', background: '#FFFBF5', borderRadius: 8, border: '1px solid #FDE8CC', borderLeft: '3px solid #F59E0B', fontSize: 13 }}>
+                          🍽 {din.meal}{din.cook ? ` · ${din.cook} cooking` : ''}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* Agenda */}
+              {agenda.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E', marginBottom: 8, paddingBottom: 4, borderBottom: '2px solid #E8E3DB' }}>Meeting Agenda</div>
+                  {agenda.map((item: string, i: number) => (
+                    <div key={i} style={{ padding: '7px 12px', background: '#F7F4EF', borderRadius: 7, marginBottom: 5, fontSize: 13, color: '#1A1A2E' }}>
+                      <strong style={{ color: '#C4522A' }}>{i+1}.</strong> {item}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Transport gaps */}
+              {events.filter((e: any) => e.transportStatus === 'needs_driver' && !e.driverId).length > 0 && (
+                <div style={{ padding: '12px 16px', background: '#FFFBEB', borderRadius: 9, border: '1px solid #FDE68A' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#92400E', marginBottom: 4 }}>⚠ Still needs drivers:</div>
+                  {events.filter((e: any) => e.transportStatus === 'needs_driver' && !e.driverId).map((e: any) => (
+                    <div key={e.id} style={{ fontSize: 12, color: '#B45309', marginBottom: 2 }}>• {e.title} ({WEEK[e.dayIdx]} {e.time})</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
@@ -708,6 +857,12 @@ export default function AdminSetupClient() {
               Sign out
             </button>
           </div>
+          {/* Preview Plan inline below header buttons */}
+          {events.length > 0 && (
+            <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
+              <PreviewPlan events={events} dinner={dinner} agenda={agenda} weekLabel={weekLabel} members={familyMembers} />
+            </div>
+          )}
         </div>
 
         {syncError && (
@@ -809,7 +964,9 @@ export default function AdminSetupClient() {
                               <div style={{ fontSize: 10, color: '#8B8599', marginTop: 1 }}>{evt.time}</div>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
                                 <div style={{ display: 'flex', gap: 2 }}>
-                                  {evt.involvedIds.length === 0
+                                  {evt.transportStatus === 'no_transport'
+                                    ? <span style={{ fontSize: 9, color: '#15803D', fontWeight: 600 }}>✓ No transport</span>
+                                    : evt.involvedIds.length === 0
                                     ? <span style={{ fontSize: 9, color: '#EF4444', fontStyle: 'italic' }}>Unassigned</span>
                                     : evt.involvedIds.slice(0, 5).map(id => {
                                         const m = getMember(id)
