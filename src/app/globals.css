@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg:       #F7F4EF;
+  --surface:  #FFFFFF;
+  --border:   #E8E3DB;
+  --navy:     #1A1A2E;
+  --accent:   #C4522A;
+  --text:     #1A1A2E;
+  --muted:    #8B8599;
+  --faint:    #C4B8A8;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
