@@ -485,7 +485,6 @@ export default function AdminSetupClient() {
             </button>
           </div>
         </div>
-      </div>
 
         {syncError && (
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', background: 'rgba(220,38,38,0.2)' }}>
@@ -866,5 +865,6 @@ export default function AdminSetupClient() {
 
       </div>
     </div>
+  </div>
   )
 }
