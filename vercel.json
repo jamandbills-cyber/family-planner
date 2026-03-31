@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/sunday-send",
+      "schedule": "0 14 * * 0"
+    },
+    {
+      "path": "/api/cron/deadline-check",
+      "schedule": "0 23 * * 0"
+    }
+  ]
+}

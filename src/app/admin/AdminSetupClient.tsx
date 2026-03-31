@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { signOut } from 'next-auth/react'
 import {
   Calendar, RefreshCw, Plus, X, Car, CheckCircle, AlertTriangle,
-  Clock, ChevronDown, ChevronUp, Undo2, Send, Loader2
+  Clock, ChevronDown, ChevronUp, Undo2, Send, Loader2, LogOut
 } from 'lucide-react'
 import type { CalendarEvent, DinnerEntry } from '@/lib/types'
 import { FAMILY_MEMBERS, ADULTS, KIDS, getMember } from '@/lib/family'
@@ -194,6 +195,58 @@ function parseTimeToMin(timeStr: string): number {
   if (period === 'PM' && hours !== 12) hours += 12
   if (period === 'AM' && hours === 12) hours = 0
   return hours * 60 + mins
+}
+
+// ─── Send Forms Button ────────────────────────────────────────
+function SendFormsButton({ weekStartKey }: { weekStartKey: string | null }) {
+  const [status,  setStatus]  = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const [results, setResults] = useState<{ sent: string[]; failed: string[] } | null>(null)
+
+  const handleSend = async () => {
+    if (!weekStartKey) return
+    setStatus('sending')
+    try {
+      const res = await fetch('/api/send-forms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weekStart: weekStartKey }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setResults({ sent: data.sent ?? [], failed: data.failed ?? [] })
+      setStatus('sent')
+    } catch {
+      setStatus('error')
+    }
+  }
+
+  if (status === 'sent' && results) {
+    return (
+      <div style={{ padding: '12px 16px', background: 'rgba(74,222,128,0.1)', borderRadius: 8, border: '1px solid rgba(74,222,128,0.3)' }}>
+        <div style={{ fontSize: 13, color: '#4ADE80', fontWeight: 600, marginBottom: 4 }}>
+          ✓ Forms sent to {results.sent.length} people
+        </div>
+        {results.sent.length > 0 && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Sent: {results.sent.join(', ')}</div>}
+        {results.failed.length > 0 && <div style={{ fontSize: 12, color: '#FCA5A5', marginTop: 3 }}>Failed: {results.failed.join(', ')} — check their phone numbers in the Family sheet</div>}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <button onClick={handleSend} disabled={status === 'sending' || !weekStartKey}
+        style={{ width: '100%', background: '#C4522A', color: '#fff', border: 'none', borderRadius: 9, padding: '13px', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (!weekStartKey || status === 'sending') ? 0.6 : 1 }}>
+        {status === 'sending'
+          ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Sending texts…</>
+          : <><Send size={16} /> Send Forms to Family Now</>
+        }
+      </button>
+      {status === 'error' && <p style={{ fontSize: 12, color: '#FCA5A5', marginTop: 8 }}>Failed to send. Check Twilio credentials in Vercel settings.</p>}
+      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 8, textAlign: 'center' }}>
+        Each person gets a text with their unique form link.
+      </p>
+    </div>
+  )
 }
 
 export default function AdminSetupClient() {
@@ -416,14 +469,21 @@ export default function AdminSetupClient() {
             {saveStatus === 'saved'  && <span style={{ fontSize: 12, color: '#4ADE80' }}>✓ Saved</span>}
             {saveStatus === 'error'  && <span style={{ fontSize: 12, color: '#FCA5A5' }}>⚠ Save failed</span>}
             {lastSynced && <span style={{ fontSize: 12, color: '#7070A0' }}>Synced: {lastSynced}</span>}
-            <button style={{ ...s.btnSec, background: 'rgba(255,255,255,0.07)', border: '1.5px solid rgba(255,255,255,0.15)', color: '#fff' }}
-              onClick={() => handleSync(weekOffset)} disabled={syncing}>
+            <button onClick={() => handleSync(weekOffset)} disabled={syncing}
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1.5px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'DM Sans',sans-serif" }}>
               {syncing
                 ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
                 : <RefreshCw size={13} />
               }
               {syncing ? 'Syncing…' : events.length === 0 ? 'Load Calendar' : 'Re-sync Calendar'}
             </button>
+            <button onClick={() => signOut({ callbackUrl: '/auth/signin' })}
+              title="Sign out"
+              style={{ background: 'rgba(255,255,255,0.07)', border: '1.5px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.6)', borderRadius: 8, padding: '9px 12px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'DM Sans',sans-serif" }}>
+              <LogOut size={13} />
+              Sign out
+            </button>
+          </div>
           </div>
         </div>
 
@@ -699,22 +759,25 @@ export default function AdminSetupClient() {
           </div>
         </div>
 
-        {/* MARK AS READY */}
+        {/* MARK AS READY + SEND FORMS */}
         {isReady ? (
-          <div style={{ background: 'linear-gradient(135deg,#1A1A2E,#2D2D4A)', borderRadius: 12, padding: 24, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <CheckCircle size={26} style={{ color: '#4ADE80', flexShrink: 0 }} />
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 3 }}>Ready to go</div>
-                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
-                  Forms go out Sunday at 8:00 AM · Deadline: {deadlineDay === 'sunday' ? 'Sun' : 'Sat'} at {deadline}
+          <div style={{ background: 'linear-gradient(135deg,#1A1A2E,#2D2D4A)', borderRadius: 12, padding: 24, color: '#fff', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <CheckCircle size={26} style={{ color: '#4ADE80', flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 3 }}>Ready to go</div>
+                  <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
+                    Deadline: {deadlineDay === 'sunday' ? 'Sun' : 'Sat'} at {deadline}
+                  </div>
                 </div>
               </div>
+              <button onClick={() => setIsReady(false)}
+                style={{ background: 'rgba(255,255,255,0.1)', border: '1.5px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: 8, padding: '10px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7, fontFamily: "'DM Sans',sans-serif" }}>
+                <Undo2 size={14} /> Undo
+              </button>
             </div>
-            <button onClick={() => setIsReady(false)}
-              style={{ background: 'rgba(255,255,255,0.1)', border: '1.5px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: 8, padding: '10px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7, fontFamily: "'DM Sans',sans-serif" }}>
-              <Undo2 size={14} /> Undo — back to editing
-            </button>
+            <SendFormsButton weekStartKey={weekStartKey} />
           </div>
         ) : (
           <div style={{ ...s.card, padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
