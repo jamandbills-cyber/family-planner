@@ -360,8 +360,10 @@ export default function MeetingPage() {
                       ))}
                       {WEEK.map((_, dayIdx) => {
                         const dayEvts = eventsByDay[dayIdx]
+                        const din = dinner.find(d => d.dayIdx === dayIdx) ?? { meal: '', cook: '' }
                         return (
                           <div key={dayIdx} style={{ padding:'6px 5px', borderRight: dayIdx<6?'1px solid #EDE8E0':'none', minHeight:120, display:'flex', flexDirection:'column' }}>
+                            <div style={{ flex:1 }}>
                             {dayEvts.length === 0
                               ? <div style={{ fontSize:10, color:'#C4B8A8', fontStyle:'italic', textAlign:'center', paddingTop:8 }}>Free</div>
                               : dayEvts.map(evt => {
@@ -384,6 +386,18 @@ export default function MeetingPage() {
                                   )
                                 })
                             }
+                            </div>
+                            {/* Dinner slot */}
+                            <div style={{ borderTop:'1px dashed #E2DDD6', paddingTop:5, marginTop:5 }}>
+                              <div style={{ fontSize:8, fontWeight:700, color:'#B0A898', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:3 }}>🍽</div>
+                              {din.meal
+                                ? <>
+                                    <div style={{ fontSize:10, fontWeight:600, color:'#92400E' }}>{din.meal}</div>
+                                    {din.cook && <div style={{ fontSize:9, color:'#B45309', marginTop:1 }}>{din.cook}</div>}
+                                  </>
+                                : <div style={{ fontSize:9, color:'#C4B8A8', fontStyle:'italic' }}>TBD</div>
+                              }
+                            </div>
                           </div>
                         )
                       })}
@@ -392,29 +406,51 @@ export default function MeetingPage() {
 
                   {sel && (
                     <div className="fade-in" style={{ borderTop:'2px solid #C4522A', background:'#1A1A2E', borderRadius:'0 0 12px 12px', padding:'18px 20px' }}>
-                      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:12 }}>
+                      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16 }}>
                         <div>
                           <div style={{ fontFamily:"'Playfair Display',serif", fontSize:16, fontWeight:700, color:'#fff', marginBottom:2 }}>{sel.title}</div>
                           <div style={{ fontSize:12, color:'rgba(255,255,255,0.5)' }}>{sel.time}{sel.location ? ` · ${sel.location}` : ''}</div>
                         </div>
                         <button className="btn-ghost" onClick={() => setSelectedEvt(null)}><X size={16} color="rgba(255,255,255,0.3)" /></button>
                       </div>
-                      {sel.transportStatus === 'needs_driver' && (
-                        <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
-                          <span style={{ fontSize:12, color:'rgba(255,255,255,0.5)' }}>Assign driver:</span>
-                          <select value={sel.driverId ?? ''} onChange={e => assignDriver(sel.id, e.target.value)}
-                            style={{ background:'#fff', border:'1.5px solid rgba(255,255,255,0.3)', color:'#1A1A2E', borderRadius:6, padding:'6px 10px', fontSize:13 }}>
-                            <option value="">— No driver assigned —</option>
+
+                      {sel.transportStatus === 'needs_driver' ? (
+                        <div>
+                          <div style={{ fontSize:11, fontWeight:600, color:'rgba(255,255,255,0.4)', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:10 }}>
+                            Who can drive?
+                          </div>
+                          <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
                             {members.filter(m => m.type === 'adult').map(a => {
-                              const sub = submissions.find(s => s.memberId === a.id)
-                              const canDrive = sub?.payload?.drivingResponses?.[sel.id] === true
-                              return <option key={a.id} value={a.id}>{a.name}{canDrive ? ' ✓ available' : ''}</option>
+                              const sub      = submissions.find(s => s.memberId === a.id)
+                              const response = sub?.payload?.drivingResponses?.[sel.id]
+                              const canDrive = response === true
+                              const cantDrive= response === false
+                              const noAnswer = response == null
+                              const assigned = sel.driverId === a.id
+                              return (
+                                <div key={a.id}
+                                  onClick={() => assignDriver(sel.id, assigned ? null : a.id)}
+                                  style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:9, cursor:'pointer', transition:'all 0.12s',
+                                    background: assigned ? a.color : canDrive ? 'rgba(74,222,128,0.1)' : cantDrive ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.06)',
+                                    border: `1.5px solid ${assigned ? a.color : canDrive ? 'rgba(74,222,128,0.3)' : cantDrive ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.1)'}`,
+                                  }}>
+                                  <span style={{ width:28, height:28, borderRadius:'50%', background: assigned?'rgba(255,255,255,0.25)':a.color, color:'#fff', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                    {a.name[0]}
+                                  </span>
+                                  <span style={{ fontSize:13, fontWeight:600, color:'#fff', flex:1 }}>{a.name}</span>
+                                  {assigned   && <span style={{ fontSize:11, background:'rgba(255,255,255,0.2)', color:'#fff', padding:'3px 9px', borderRadius:6, fontWeight:700 }}>🚗 Assigned</span>}
+                                  {!assigned && canDrive  && <span style={{ fontSize:11, color:'#4ADE80', fontWeight:600 }}>✓ Available</span>}
+                                  {!assigned && cantDrive && <span style={{ fontSize:11, color:'rgba(239,68,68,0.7)', fontWeight:500 }}>✗ Not available</span>}
+                                  {!assigned && noAnswer  && <span style={{ fontSize:11, color:'rgba(255,255,255,0.3)', fontStyle:'italic' }}>No response</span>}
+                                </div>
+                              )
                             })}
-                            <option value="__carpool__">Outside carpool</option>
-                          </select>
-                          <span style={{ fontSize:11, color:'rgba(255,255,255,0.35)', fontStyle:'italic' }}>
-                            Available: {submissions.filter(s => s.payload?.drivingResponses?.[sel.id] === true).map(s => getMember(s.memberId)?.name).filter(Boolean).join(', ') || 'None yet'}
-                          </span>
+                          </div>
+                          <p style={{ fontSize:11, color:'rgba(255,255,255,0.3)', marginTop:10, fontStyle:'italic' }}>Tap a person to assign or unassign them as driver.</p>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize:13, color:'rgba(255,255,255,0.4)', fontStyle:'italic' }}>
+                          No transport needed for this event.
                         </div>
                       )}
                     </div>
