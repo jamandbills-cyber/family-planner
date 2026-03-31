@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   Calendar, RefreshCw, Plus, X, Car, CheckCircle, AlertTriangle,
   Clock, ChevronDown, ChevronUp, Undo2, Send, Loader2
@@ -31,6 +31,171 @@ function resolvedStatus(evt: CalendarEvent) {
   return evt.transportStatus
 }
 
+// ─── School kids who attend school Mon–Fri ───────────────────
+const SCHOOL_KIDS = ['boston', 'hailee', 'sadie']
+const SCHOOL_DAYS = [1, 2, 3, 4, 5] // Mon=1 … Fri=5 (matches dayIdx with Sun=0)
+
+const DEFAULT_SCHOOL = {
+  dropoffTime: '7:30 AM',
+  pickupTime:  '3:00 PM',
+  dropoffDriverId: '',
+  pickupDriverId:  '',
+  noSchool: [] as number[], // dayIdx values where school is cancelled
+}
+
+// ─── School Schedule sub-component ───────────────────────────
+function SchoolSchedule({ events, setEvents, weekDates, adults, s }: any) {
+  const [open,   setOpen]   = useState(false)
+  const [config, setConfig] = useState(DEFAULT_SCHOOL)
+
+  const WEEK_DAYS_LABEL = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+
+  const applyToCalendar = () => {
+    // Remove any existing school events first
+    const withoutSchool = events.filter((e: any) => !e.id.startsWith('school_'))
+
+    const schoolEvents: any[] = []
+    SCHOOL_DAYS.forEach(dayIdx => {
+      if (config.noSchool.includes(dayIdx)) return
+      const dateLabel = weekDates[dayIdx] ?? ''
+      // Drop-off
+      schoolEvents.push({
+        id: `school_drop_${dayIdx}`,
+        title: `School Drop-off (Boston, Hailee, Sadie)`,
+        dayIdx,
+        time: config.dropoffTime,
+        sortMin: parseTimeToMin(config.dropoffTime),
+        location: 'School',
+        allDay: false,
+        involvedIds: SCHOOL_KIDS,
+        transportStatus: 'needs_driver',
+        driverId: config.dropoffDriverId || null,
+        standingRuleId: null,
+        carpoolNote: '',
+      })
+      // Pick-up
+      schoolEvents.push({
+        id: `school_pickup_${dayIdx}`,
+        title: `School Pick-up (Boston, Hailee, Sadie)`,
+        dayIdx,
+        time: config.pickupTime,
+        sortMin: parseTimeToMin(config.pickupTime),
+        location: 'School',
+        allDay: false,
+        involvedIds: SCHOOL_KIDS,
+        transportStatus: 'needs_driver',
+        driverId: config.pickupDriverId || null,
+        standingRuleId: null,
+        carpoolNote: '',
+      })
+    })
+
+    setEvents([...withoutSchool, ...schoolEvents])
+  }
+
+  const toggleNoSchool = (dayIdx: number) => {
+    setConfig(c => ({
+      ...c,
+      noSchool: c.noSchool.includes(dayIdx)
+        ? c.noSchool.filter(d => d !== dayIdx)
+        : [...c.noSchool, dayIdx]
+    }))
+  }
+
+  const schoolEventsInCalendar = events.filter((e: any) => e.id.startsWith('school_')).length
+
+  return (
+    <div style={s.card}>
+      <button onClick={() => setOpen((o: boolean) => !o)}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 16 }}>🏫</span>
+          <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, fontWeight: 600, color: '#1A1A2E' }}>School Schedule</span>
+          {schoolEventsInCalendar > 0
+            ? <span style={{ fontSize: 11, background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>Added to calendar ✓</span>
+            : <span style={{ fontSize: 11, background: '#F0EDE8', color: '#8B8599', padding: '2px 8px', borderRadius: 10 }}>Boston · Hailee · Sadie</span>
+          }
+        </div>
+        {open ? <ChevronUp size={15} color="#8B8599" /> : <ChevronDown size={15} color="#8B8599" />}
+      </button>
+
+      {open && (
+        <div style={{ padding: '0 20px 20px', borderTop: '1px solid #F0EDE8' }}>
+          <p style={{ fontSize: 13, color: '#8B8599', margin: '12px 0 16px', lineHeight: 1.5 }}>
+            Boston, Hailee, and Sadie have school Monday–Friday. Set the times and default drivers, then apply to the calendar.
+          </p>
+
+          {/* Times */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#8B8599', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Drop-off time</div>
+              <input type="text" value={config.dropoffTime}
+                onChange={e => setConfig(c => ({ ...c, dropoffTime: e.target.value }))}
+                style={{ ...s.field, fontSize: 13, padding: '8px 10px' }} placeholder="e.g. 7:30 AM" />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#8B8599', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Pick-up time</div>
+              <input type="text" value={config.pickupTime}
+                onChange={e => setConfig(c => ({ ...c, pickupTime: e.target.value }))}
+                style={{ ...s.field, fontSize: 13, padding: '8px 10px' }} placeholder="e.g. 3:00 PM" />
+            </div>
+          </div>
+
+          {/* Default drivers */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#8B8599', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Default drop-off driver</div>
+              <select value={config.dropoffDriverId} onChange={e => setConfig(c => ({ ...c, dropoffDriverId: e.target.value }))} style={{ ...s.select, width: '100%' }}>
+                <option value="">— Set per day in calendar —</option>
+                {adults.map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#8B8599', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Default pick-up driver</div>
+              <select value={config.pickupDriverId} onChange={e => setConfig(c => ({ ...c, pickupDriverId: e.target.value }))} style={{ ...s.select, width: '100%' }}>
+                <option value="">— Set per day in calendar —</option>
+                {adults.map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* No school days */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#8B8599', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>No school this week?</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {SCHOOL_DAYS.map(dayIdx => {
+                const off = config.noSchool.includes(dayIdx)
+                return (
+                  <button key={dayIdx} onClick={() => toggleNoSchool(dayIdx)}
+                    style={{ padding: '7px 12px', borderRadius: 7, fontSize: 12, fontWeight: off ? 700 : 500, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", border: `1.5px solid ${off ? '#FECACA' : '#E2DDD6'}`, background: off ? '#FEF2F2' : '#fff', color: off ? '#DC2626' : '#4A4A5A', transition: 'all 0.12s' }}>
+                    {off ? '✗ ' : ''}{WEEK_DAYS_LABEL[dayIdx]}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <button onClick={applyToCalendar}
+            style={{ ...s.btnPri, width: '100%', justifyContent: 'center', padding: '11px' }}>
+            {schoolEventsInCalendar > 0 ? '↺ Update School Events in Calendar' : '+ Add School Events to Calendar'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function parseTimeToMin(timeStr: string): number {
+  const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i)
+  if (!match) return 0
+  let hours = parseInt(match[1])
+  const mins = parseInt(match[2])
+  const period = match[3].toUpperCase()
+  if (period === 'PM' && hours !== 12) hours += 12
+  if (period === 'AM' && hours === 12) hours = 0
+  return hours * 60 + mins
+}
+
 // ─── Initial standing rules (saved to DB in production) ───────
 const INIT_RULES: StandingRule[] = []
 
@@ -49,13 +214,69 @@ export default function AdminSetupClient() {
   const [lastSynced,  setLastSynced]  = useState<string | null>(null)
   const [weekLabel,   setWeekLabel]   = useState('This Week')
   const [weekDates,   setWeekDates]   = useState<string[]>(WEEK_LABELS.map(() => ''))
-  const [weekOffset,  setWeekOffset]  = useState(0)   // 0 = this week, 1 = next week, etc.
+  const [weekOffset,  setWeekOffset]  = useState(0)
   const [futureOpen,  setFutureOpen]  = useState(false)
   const [syncError,   setSyncError]   = useState<string | null>(null)
-  const [rulesOpen,   setRulesOpen]   = useState(false)
-  const [addRuleOpen, setAddRuleOpen] = useState(false)
-  const [newRule,     setNewRule]     = useState({ driverId: '', passengerId: '', recurrence: '' })
   const [selectedId,  setSelectedId]  = useState<string | null>(null)
+  const [saveStatus,  setSaveStatus]  = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [weekStartKey, setWeekStartKey] = useState<string | null>(null)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ─── Build state snapshot for saving ─────────────────────────
+  const getSnapshot = useCallback(() => ({
+    events, dinner, agenda, deadline, deadlineDay, isReady
+  }), [events, dinner, agenda, deadline, deadlineDay, isReady])
+
+  // ─── Save to Google Sheets (debounced 2s) ────────────────────
+  const saveState = useCallback(async (weekStart: string, snapshot: object) => {
+    if (!weekStart) return
+    setSaveStatus('saving')
+    try {
+      const res = await fetch('/api/admin-state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weekStart, state: snapshot }),
+      })
+      if (!res.ok) throw new Error('Save failed')
+      setSaveStatus('saved')
+      setTimeout(() => setSaveStatus('idle'), 3000)
+    } catch {
+      setSaveStatus('error')
+    }
+  }, [])
+
+  const triggerSave = useCallback((weekStart: string, snapshot: object) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => saveState(weekStart, snapshot), 2000)
+  }, [saveState])
+
+  // ─── Auto-save when key state changes ────────────────────────
+  useEffect(() => {
+    if (weekStartKey && events.length > 0) {
+      triggerSave(weekStartKey, getSnapshot())
+    }
+  }, [events, dinner, agenda, deadline, deadlineDay, isReady])
+
+  // ─── Load saved state for a given weekStart ───────────────────
+  const loadState = useCallback(async (weekStart: string) => {
+    try {
+      const res = await fetch(`/api/admin-state?weekStart=${weekStart}`)
+      if (!res.ok) return
+      const data = await res.json()
+      if (!data.found) return
+      const saved = data.state
+      if (saved.events?.length)        setEvents(saved.events)
+      if (saved.dinner)                setDinner(saved.dinner)
+      if (saved.agenda)                setAgenda(saved.agenda)
+      if (saved.deadline)              setDeadline(saved.deadline)
+      if (saved.deadlineDay)           setDeadlineDay(saved.deadlineDay)
+      if (saved.isReady !== undefined) setIsReady(saved.isReady)
+      setSaveStatus('saved')
+      setTimeout(() => setSaveStatus('idle'), 2000)
+    } catch {
+      // No saved state yet — that's fine
+    }
+  }, [])
 
   // ─── Sync with Google Calendar ──────────────────────────────
   const handleSync = useCallback(async (offset: number = weekOffset) => {
@@ -124,6 +345,11 @@ export default function AdminSetupClient() {
         setWeekDates(dates)
         const offsetLabel = offset === 0 ? 'This Week' : offset === 1 ? 'Next Week' : `In ${offset} Weeks`
         setWeekLabel(`${offsetLabel} · ${dates[0]}`)
+
+        // Set the week key and try to load saved state
+        const weekStartStr = data.weekStart as string
+        setWeekStartKey(weekStartStr)
+        await loadState(weekStartStr)
       }
     } catch (err) {
       setSyncError(err instanceof Error ? err.message : 'Sync failed')
@@ -210,6 +436,9 @@ export default function AdminSetupClient() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {saveStatus === 'saving' && <span style={{ fontSize: 12, color: '#7070A0' }}>Saving…</span>}
+            {saveStatus === 'saved'  && <span style={{ fontSize: 12, color: '#4ADE80' }}>✓ Saved</span>}
+            {saveStatus === 'error'  && <span style={{ fontSize: 12, color: '#FCA5A5' }}>⚠ Save failed</span>}
             {lastSynced && <span style={{ fontSize: 12, color: '#7070A0' }}>Synced: {lastSynced}</span>}
             <button style={{ ...s.btnSec, background: 'rgba(255,255,255,0.07)', border: '1.5px solid rgba(255,255,255,0.15)', color: '#fff' }}
               onClick={() => handleSync(weekOffset)} disabled={syncing}>
@@ -428,13 +657,12 @@ export default function AdminSetupClient() {
                   {sel.transportStatus === 'needs_driver' && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                       <select value={sel.driverId ?? ''} onChange={e => assignDriver(sel.id, e.target.value)}
-                        style={{ ...s.select, background: 'rgba(255,255,255,0.1)', border: '1.5px solid rgba(255,255,255,0.2)', color: '#fff' }}>
+                        style={{ ...s.select, background: '#fff', border: '1.5px solid rgba(255,255,255,0.4)', color: '#1A1A2E' }}>
                         <option value="">— Assign driver —</option>
-                        {ADULTS.map(a => {
-                          const rule = rules.find(r => r.id === sel.standingRuleId)
-                          return <option key={a.id} value={a.id}>{a.name}{rule?.driverId === a.id ? ' (standing)' : ''}</option>
-                        })}
-                        <option value="__carpool__">Outside carpool</option>
+                        {ADULTS.map(a => (
+                          <option key={a.id} value={a.id} style={{ color: '#1A1A2E', background: '#fff' }}>{a.name}</option>
+                        ))}
+                        <option value="__carpool__" style={{ color: '#1A1A2E', background: '#fff' }}>Outside carpool</option>
                       </select>
                       <input type="text" placeholder="Carpool note (optional)" value={sel.carpoolNote ?? ''}
                         onChange={e => updateCarpoolNote(sel.id, e.target.value)}
@@ -529,73 +757,14 @@ export default function AdminSetupClient() {
           </div>
         )}
 
-        {/* STANDING RULES */}
-        <div style={s.card}>
-          <button onClick={() => setRulesOpen(o => !o)}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Car size={15} style={{ color: '#8B8599' }} />
-              <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, fontWeight: 600, color: '#1A1A2E' }}>Standing Rules</span>
-              <span style={{ fontSize: 11, background: '#F0EDE8', color: '#8B8599', padding: '2px 8px', borderRadius: 12 }}>{rules.length}</span>
-            </div>
-            {rulesOpen ? <ChevronUp size={15} color="#8B8599" /> : <ChevronDown size={15} color="#8B8599" />}
-          </button>
-          {rulesOpen && (
-            <div style={{ padding: '0 20px 20px', borderTop: '1px solid #F0EDE8' }}>
-              <p style={{ fontSize: 12, color: '#8B8599', margin: '12px 0 14px' }}>
-                These auto-apply every week. Override this week only without permanently changing the rule.
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {rules.map(rule => {
-                  const driver = getMember(rule.driverId)
-                  const ov = rule.overrideThisWeek
-                  return (
-                    <div key={rule.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: ov ? '#FEF2F2' : '#F0FDF4', borderRadius: 8, border: `1px solid ${ov ? '#FECACA' : '#BBF7D0'}`, flexWrap: 'wrap', gap: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ width: 22, height: 22, borderRadius: '50%', background: driver?.color, color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{driver?.name[0]}</span>
-                        <span style={{ fontSize: 13, fontWeight: 500, color: ov ? '#DC2626' : '#166534' }}>{rule.label}</span>
-                        <span style={{ fontSize: 11, color: '#8B8599' }}>({rule.recurrence})</span>
-                      </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button style={{ ...s.btnSec, fontSize: 12, padding: '4px 10px', border: `1.5px solid ${ov ? '#FECACA' : '#DDD8CF'}`, color: ov ? '#DC2626' : '#6B7280' }}
-                          onClick={() => toggleRuleOverride(rule.id)}>
-                          {ov ? '↩ Restore' : 'Override this week'}
-                        </button>
-                        <button style={s.btnGhost} onClick={() => setRules(r => r.filter(x => x.id !== rule.id))}><X size={13} /></button>
-                      </div>
-                    </div>
-                  )
-                })}
-                {rules.length === 0 && <p style={{ fontSize: 13, color: '#C4B8A8', fontStyle: 'italic' }}>No standing rules yet.</p>}
-              </div>
-              {addRuleOpen ? (
-                <div style={{ marginTop: 12, padding: 14, background: '#F7F4EF', borderRadius: 8, border: '1px solid #E8E3DB', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>New Standing Rule</div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <select value={newRule.driverId} onChange={e => setNewRule(r => ({ ...r, driverId: e.target.value }))} style={s.select}>
-                      <option value="">Driver…</option>
-                      {ADULTS.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                    </select>
-                    <span style={{ fontSize: 12, color: '#8B8599' }}>drives</span>
-                    <select value={newRule.passengerId} onChange={e => setNewRule(r => ({ ...r, passengerId: e.target.value }))} style={s.select}>
-                      <option value="">Passenger…</option>
-                      {KIDS.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
-                    </select>
-                    <input type="text" placeholder="When? (e.g. Every Tuesday)" value={newRule.recurrence}
-                      onChange={e => setNewRule(r => ({ ...r, recurrence: e.target.value }))}
-                      style={{ border: '1.5px solid #E8E3DB', borderRadius: 6, padding: '5px 10px', fontSize: 13, flex: 1, minWidth: 160, fontFamily: "'DM Sans',sans-serif" }} />
-                    <button style={{ ...s.btnPri, padding: '7px 14px' }} onClick={addRule}>Add</button>
-                    <button style={{ ...s.btnSec, padding: '7px 12px' }} onClick={() => setAddRuleOpen(false)}>Cancel</button>
-                  </div>
-                </div>
-              ) : (
-                <button style={{ ...s.btnSec, marginTop: 12, fontSize: 12 }} onClick={() => setAddRuleOpen(true)}>
-                  <Plus size={12} /> Add standing rule
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        {/* ── SCHOOL SCHEDULE ──────────────────────────────────── */}
+        <SchoolSchedule
+          events={events}
+          setEvents={setEvents}
+          weekDates={weekDates}
+          adults={ADULTS}
+          s={s}
+        />
 
         {/* ── PLAN AHEAD ────────────────────────────────────────── */}
         <div style={s.card}>
