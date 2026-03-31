@@ -212,7 +212,7 @@ export default function AdminSetupClient() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {lastSynced && <span style={{ fontSize: 12, color: '#7070A0' }}>Synced: {lastSynced}</span>}
             <button style={{ ...s.btnSec, background: 'rgba(255,255,255,0.07)', border: '1.5px solid rgba(255,255,255,0.15)', color: '#fff' }}
-              onClick={handleSync} disabled={syncing}>
+              onClick={() => handleSync(weekOffset)} disabled={syncing}>
               {syncing
                 ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
                 : <RefreshCw size={13} />
