@@ -5,7 +5,7 @@ import {
   Calendar, RefreshCw, Plus, X, Car, CheckCircle, AlertTriangle,
   Clock, ChevronDown, ChevronUp, Undo2, Send, Loader2
 } from 'lucide-react'
-import type { CalendarEvent, StandingRule, DinnerEntry } from '@/lib/types'
+import type { CalendarEvent, DinnerEntry } from '@/lib/types'
 import { FAMILY_MEMBERS, ADULTS, KIDS, getMember } from '@/lib/family'
 
 // ─── Week display helpers ─────────────────────────────────────
@@ -196,12 +196,8 @@ function parseTimeToMin(timeStr: string): number {
   return hours * 60 + mins
 }
 
-// ─── Initial standing rules (saved to DB in production) ───────
-const INIT_RULES: StandingRule[] = []
-
 export default function AdminSetupClient() {
   const [events,      setEvents]      = useState<CalendarEvent[]>([])
-  const [rules,       setRules]       = useState<StandingRule[]>(INIT_RULES)
   const [dinner,      setDinner]      = useState<DinnerEntry[]>(
     WEEK_LABELS.map((_, i) => ({ dayIdx: i, meal: '', cook: '' }))
   )
@@ -297,10 +293,7 @@ export default function AdminSetupClient() {
                            prev.find(e => e.title === evt.title && e.dayIdx === evt.dayIdx)
 
           // Apply standing rules if no existing assignment
-          const matchingRule = rules.find(r =>
-            !r.overrideThisWeek &&
-            evt.title.toLowerCase().includes(getMember(r.passengerId)?.name.toLowerCase() ?? '')
-          )
+          const matchingRule = null
 
           if (existing && (
             existing.involvedIds.length > 0 ||
@@ -356,7 +349,7 @@ export default function AdminSetupClient() {
     } finally {
       setSyncing(false)
     }
-  }, [rules, weekOffset])
+  }, [weekOffset, loadState])
 
   // ─── Event handlers ─────────────────────────────────────────
   const setTransportStatus = (id: string, status: CalendarEvent['transportStatus']) =>
@@ -376,23 +369,6 @@ export default function AdminSetupClient() {
       const has = e.involvedIds.includes(memberId)
       return { ...e, involvedIds: has ? e.involvedIds.filter(i => i !== memberId) : [...e.involvedIds, memberId] }
     }))
-
-  const toggleRuleOverride = (ruleId: string) =>
-    setRules(r => r.map(rule => rule.id === ruleId ? { ...rule, overrideThisWeek: !rule.overrideThisWeek } : rule))
-
-  const addRule = () => {
-    if (!newRule.driverId || !newRule.passengerId || !newRule.recurrence) return
-    const d = getMember(newRule.driverId), p = getMember(newRule.passengerId)
-    if (!d || !p) return
-    setRules(r => [...r, {
-      id: 'sr' + Date.now(),
-      label: `${d.name} drives ${p.name} (${newRule.recurrence})`,
-      ...newRule,
-      overrideThisWeek: false,
-    }])
-    setNewRule({ driverId: '', passengerId: '', recurrence: '' })
-    setAddRuleOpen(false)
-  }
 
   const updateDinner = (dayIdx: number, field: keyof DinnerEntry, value: string) =>
     setDinner(d => d.map(s => s.dayIdx === dayIdx ? { ...s, [field]: value } : s))
