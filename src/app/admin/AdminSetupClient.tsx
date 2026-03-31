@@ -44,6 +44,112 @@ const DEFAULT_SCHOOL = {
   noSchool: [] as number[], // dayIdx values where school is cancelled
 }
 
+// ─── Test Links Panel ─────────────────────────────────────────
+function TestLinksPanel({ weekStartKey }: { weekStartKey: string | null }) {
+  const [open,    setOpen]    = useState(false)
+  const [status,  setStatus]  = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
+  const [links,   setLinks]   = useState<Array<{ name: string; type: string; url: string }>>([])
+  const [errMsg,  setErrMsg]  = useState('')
+  const [copied,  setCopied]  = useState<string | null>(null)
+
+  const generate = async () => {
+    if (!weekStartKey) return
+    setStatus('loading')
+    setErrMsg('')
+    try {
+      const res = await fetch('/api/generate-test-links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weekStart: weekStartKey }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`)
+      setLinks(data.links ?? [])
+      setStatus('done')
+    } catch (e: any) {
+      setErrMsg(e.message)
+      setStatus('error')
+    }
+  }
+
+  const copyLink = (url: string, name: string) => {
+    navigator.clipboard.writeText(url)
+    setCopied(name)
+    setTimeout(() => setCopied(null), 2000)
+  }
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #E8E3DB', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 16 }}>🔗</span>
+          <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, fontWeight: 600, color: '#1A1A2E' }}>Test Form Links</span>
+          <span style={{ fontSize: 11, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>Skip SMS</span>
+        </div>
+        {open ? <ChevronUp size={15} color="#8B8599" /> : <ChevronDown size={15} color="#8B8599" />}
+      </button>
+      {open && (
+        <div style={{ padding: '0 20px 20px', borderTop: '1px solid #F0EDE8' }}>
+          <p style={{ fontSize: 13, color: '#8B8599', margin: '12px 0 16px', lineHeight: 1.5 }}>
+            Generate form links for everyone without sending texts. Use these to test submissions or share links manually while Twilio registration is pending.
+          </p>
+          {status === 'idle' && (
+            <button onClick={generate} disabled={!weekStartKey}
+              style={{ background: '#1D4ED8', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", display: 'flex', alignItems: 'center', gap: 7, opacity: weekStartKey ? 1 : 0.5 }}>
+              <Plus size={14} /> Generate Form Links
+            </button>
+          )}
+          {status === 'loading' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#8B8599' }}>
+              <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Generating links…
+            </div>
+          )}
+          {status === 'error' && (
+            <div style={{ padding: '10px 14px', background: '#FEF2F2', borderRadius: 8, border: '1px solid #FECACA', fontSize: 13, color: '#DC2626', marginBottom: 10 }}>
+              ⚠ {errMsg || 'Failed to generate links'}
+              <button onClick={generate} style={{ marginLeft: 8, background: 'none', border: 'none', color: '#DC2626', cursor: 'pointer', textDecoration: 'underline', fontSize: 12, fontFamily: "'DM Sans',sans-serif" }}>Try again</button>
+            </div>
+          )}
+          {status === 'done' && links.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {(['adult', 'kid'] as const).map(type => {
+                const group = links.filter(l => l.type === type)
+                if (!group.length) return null
+                return (
+                  <div key={type}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#8B8599', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>
+                      {type === 'adult' ? '👩 Adults' : '🧒 Kids'}
+                    </div>
+                    {group.map(link => (
+                      <div key={link.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: '#F7F4EF', borderRadius: 8, marginBottom: 6 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E', minWidth: 70 }}>{link.name}</span>
+                        <span style={{ fontSize: 11, color: '#8B8599', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link.url}</span>
+                        <a href={link.url} target="_blank" rel="noreferrer"
+                          style={{ fontSize: 12, color: '#1D4ED8', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap', padding: '4px 8px', background: '#EFF6FF', borderRadius: 5 }}>
+                          Open ↗
+                        </a>
+                        <button onClick={() => copyLink(link.url, link.name)}
+                          style={{ fontSize: 12, color: copied === link.name ? '#15803D' : '#8B8599', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", whiteSpace: 'nowrap' }}>
+                          {copied === link.name ? '✓ Copied' : 'Copy'}
+                        </button>
+                      </div>
+                    ))}
+                    <button onClick={generate}
+                      style={{ fontSize: 12, color: '#8B8599', background: 'none', border: '1px solid #DDD8CF', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", marginTop: 4 }}>
+                      ↺ Regenerate
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── School Schedule sub-component ───────────────────────────
 function SchoolSchedule({ events, setEvents, weekDates, adults, s }: any) {
   const [open,   setOpen]   = useState(false)
@@ -920,6 +1026,9 @@ export default function AdminSetupClient() {
             </button>
           </div>
         )}
+
+        {/* ── TEST FORM LINKS ──────────────────────────────────── */}
+        <TestLinksPanel weekStartKey={weekStartKey} />
 
         {/* ── SCHOOL SCHEDULE ──────────────────────────────────── */}
         <SchoolSchedule
