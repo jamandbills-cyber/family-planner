@@ -7,10 +7,7 @@ import {
   Clock, ChevronDown, ChevronUp, Undo2, Send, Loader2, LogOut
 } from 'lucide-react'
 import type { CalendarEvent, DinnerEntry } from '@/lib/types'
-
-// Family members loaded dynamically from Google Sheets
-// These are fallbacks used only before the API loads
-const DEFAULT_FAMILY = { adults: [], kids: [], all: [], getMember: (_id: string) => undefined }
+import { FAMILY_MEMBERS } from '@/lib/family'
 
 // ─── Week display helpers ─────────────────────────────────────
 const WEEK_LABELS = [
@@ -274,8 +271,8 @@ export default function AdminSetupClient() {
   const [weekStartKey,setWeekStartKey]= useState<string | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // ─── Family members from Google Sheets ───────────────────────
-  const [familyMembers, setFamilyMembers] = useState<any[]>([])
+  // ─── Family members — start with family.ts, upgrade from Sheet ──
+  const [familyMembers, setFamilyMembers] = useState<any[]>(FAMILY_MEMBERS)
   const ADULTS     = familyMembers.filter(m => m.type === 'adult')
   const KIDS       = familyMembers.filter(m => m.type === 'child')
   const getMember  = (id: string) => familyMembers.find(m => m.id === id)
@@ -283,8 +280,10 @@ export default function AdminSetupClient() {
   useEffect(() => {
     fetch('/api/family')
       .then(r => r.json())
-      .then(data => { if (data.members) setFamilyMembers(data.members) })
-      .catch(() => {}) // silently fail — family.ts fallback still works
+      .then(data => {
+        if (data.members?.length > 0) setFamilyMembers(data.members)
+      })
+      .catch(() => {}) // silently fail — family.ts data stays in place
   }, [])
 
   // ─── Build state snapshot for saving ─────────────────────────
