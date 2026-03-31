@@ -201,10 +201,12 @@ function parseTimeToMin(timeStr: string): number {
 function SendFormsButton({ weekStartKey }: { weekStartKey: string | null }) {
   const [status,  setStatus]  = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [results, setResults] = useState<{ sent: string[]; failed: string[] } | null>(null)
+  const [errMsg,  setErrMsg]  = useState('')
 
   const handleSend = async () => {
     if (!weekStartKey) return
     setStatus('sending')
+    setErrMsg('')
     try {
       const res = await fetch('/api/send-forms', {
         method: 'POST',
@@ -212,25 +214,28 @@ function SendFormsButton({ weekStartKey }: { weekStartKey: string | null }) {
         body: JSON.stringify({ weekStart: weekStartKey }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
+      if (!res.ok) throw new Error(data.error ?? `Server error ${res.status}`)
       setResults({ sent: data.sent ?? [], failed: data.failed ?? [] })
       setStatus('sent')
-    } catch {
+    } catch (e: any) {
+      setErrMsg(e.message ?? 'Unknown error')
       setStatus('error')
     }
   }
 
-  if (status === 'sent' && results) {
-    return (
-      <div style={{ padding: '12px 16px', background: 'rgba(74,222,128,0.1)', borderRadius: 8, border: '1px solid rgba(74,222,128,0.3)' }}>
-        <div style={{ fontSize: 13, color: '#4ADE80', fontWeight: 600, marginBottom: 4 }}>
-          ✓ Forms sent to {results.sent.length} people
-        </div>
-        {results.sent.length > 0 && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Sent: {results.sent.join(', ')}</div>}
-        {results.failed.length > 0 && <div style={{ fontSize: 12, color: '#FCA5A5', marginTop: 3 }}>Failed: {results.failed.join(', ')} — check their phone numbers in the Family sheet</div>}
+  if (status === 'sent' && results) return (
+    <div style={{ padding: '12px 16px', background: 'rgba(74,222,128,0.1)', borderRadius: 8, border: '1px solid rgba(74,222,128,0.3)' }}>
+      <div style={{ fontSize: 13, color: '#4ADE80', fontWeight: 600, marginBottom: results.failed.length ? 4 : 0 }}>
+        ✓ Forms sent to {results.sent.length} {results.sent.length === 1 ? 'person' : 'people'}
+        {results.sent.length > 0 && <span style={{ fontWeight: 400, opacity: 0.7 }}> — {results.sent.join(', ')}</span>}
       </div>
-    )
-  }
+      {results.failed.length > 0 && (
+        <div style={{ fontSize: 12, color: '#FCA5A5', marginTop: 4 }}>
+          ⚠ Failed: {results.failed.join(', ')} — check phone numbers in the Family sheet
+        </div>
+      )}
+    </div>
+  )
 
   return (
     <div>
@@ -241,11 +246,109 @@ function SendFormsButton({ weekStartKey }: { weekStartKey: string | null }) {
           : <><Send size={16} /> Send Forms to Family Now</>
         }
       </button>
-      {status === 'error' && <p style={{ fontSize: 12, color: '#FCA5A5', marginTop: 8 }}>Failed to send. Check Twilio credentials in Vercel settings.</p>}
+      {status === 'error' && (
+        <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(239,68,68,0.15)', borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)', fontSize: 12, color: '#FCA5A5' }}>
+          ⚠ {errMsg || 'Failed to send. Check Twilio credentials in Vercel settings.'}
+          <button onClick={handleSend} style={{ marginLeft: 8, background: 'none', border: 'none', color: '#FCA5A5', cursor: 'pointer', textDecoration: 'underline', fontSize: 12, fontFamily: "'DM Sans',sans-serif" }}>Try again</button>
+        </div>
+      )}
       <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 8, textAlign: 'center' }}>
         Each person gets a text with their unique form link.
       </p>
     </div>
+  )
+}
+
+// ─── Reminder Button ──────────────────────────────────────────
+function ReminderButton({ weekStartKey }: { weekStartKey: string | null }) {
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const [result, setResult] = useState<{ reminded: string[]; notSubmitted: string[] } | null>(null)
+
+  const handleRemind = async () => {
+    if (!weekStartKey) return
+    setStatus('sending')
+    try {
+      const res = await fetch('/api/send-reminders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weekStart: weekStartKey }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setResult({ reminded: data.reminded ?? [], notSubmitted: data.notSubmitted ?? [] })
+      setStatus('sent')
+    } catch {
+      setStatus('error')
+    }
+  }
+
+  if (status === 'sent' && result) return (
+    <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.06)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
+      {result.notSubmitted.length === 0
+        ? '✓ Everyone has submitted — no reminders needed!'
+        : `✓ Reminder sent to: ${result.reminded.join(', ') || 'none'}`
+      }
+    </div>
+  )
+
+  return (
+    <button onClick={handleRemind} disabled={status === 'sending' || !weekStartKey}
+      style={{ width: '100%', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.18)', borderRadius: 9, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+      {status === 'sending'
+        ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Sending reminders…</>
+        : <><AlertTriangle size={14} /> Send Deadline Reminders</>
+      }
+    </button>
+  )
+}
+
+// ─── Mid-Week Update Button ───────────────────────────────────
+function MidWeekUpdateButton({ weekStartKey, events, dinner, agenda, weekLabel, members }: any) {
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+
+  const WEEK = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+
+  const handleUpdate = async () => {
+    if (!weekStartKey) return
+    setStatus('sending')
+    try {
+      const schedule = WEEK.map((day: string) => {
+        const dayIdx = WEEK.indexOf(day)
+        const dayEvents = events
+          .filter((e: any) => e.dayIdx === dayIdx && e.transportStatus !== 'unset')
+          .map((e: any) => ({
+            title: e.title, time: e.time, location: e.location ?? '',
+            driver: members.find((m: any) => m.id === e.driverId)?.name ?? '',
+          }))
+        return { day, events: dayEvents }
+      })
+      const dinnerGrid = WEEK.map((day: string, i: number) => {
+        const slot = dinner.find((d: any) => d.dayIdx === i) ?? { meal: '', cook: '' }
+        return { day, meal: slot.meal, cook: slot.cook }
+      })
+      const plan = { weekLabel, weekStart: weekStartKey, schedule, dinner: dinnerGrid, agenda, shopping: [], confirmedAt: new Date().toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) }
+      const res = await fetch('/api/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weekStart: weekStartKey, plan }),
+      })
+      if (!res.ok) throw new Error('Update failed')
+      setStatus('sent')
+      setTimeout(() => setStatus('idle'), 4000)
+    } catch {
+      setStatus('error')
+      setTimeout(() => setStatus('idle'), 4000)
+    }
+  }
+
+  return (
+    <button onClick={handleUpdate} disabled={status === 'sending' || !weekStartKey}
+      style={{ width: '100%', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)', border: '1.5px solid rgba(255,255,255,0.14)', borderRadius: 9, padding: '10px', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+      {status === 'sending' && <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Sending update…</>}
+      {status === 'sent'    && <>✓ Mid-week update sent!</>}
+      {status === 'error'   && <>⚠ Update failed — try again</>}
+      {status === 'idle'    && <><RefreshCw size={13} /> Send Mid-Week Update to Family</>}
+    </button>
   )
 }
 
@@ -781,7 +884,7 @@ export default function AdminSetupClient() {
 
         {/* MARK AS READY + SEND FORMS */}
         {isReady ? (
-          <div style={{ background: 'linear-gradient(135deg,#1A1A2E,#2D2D4A)', borderRadius: 12, padding: 24, color: '#fff', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ background: 'linear-gradient(135deg,#1A1A2E,#2D2D4A)', borderRadius: 12, padding: 24, color: '#fff', display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <CheckCircle size={26} style={{ color: '#4ADE80', flexShrink: 0 }} />
@@ -798,6 +901,8 @@ export default function AdminSetupClient() {
               </button>
             </div>
             <SendFormsButton weekStartKey={weekStartKey} />
+            <ReminderButton weekStartKey={weekStartKey} />
+            <MidWeekUpdateButton weekStartKey={weekStartKey} events={events} dinner={dinner} agenda={agenda} weekLabel={weekLabel} members={familyMembers} />
           </div>
         ) : (
           <div style={{ ...s.card, padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
