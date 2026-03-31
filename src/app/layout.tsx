@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import NavBar from '@/components/NavBar'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -17,7 +18,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body style={{ paddingBottom: 80 }}>
+        {children}
+        <NavBar />
+      </body>
     </html>
   )
 }

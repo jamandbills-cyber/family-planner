@@ -659,6 +659,11 @@ export default function AdminSetupClient() {
                   <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.38)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 9 }}>
                     Who's involved — tap to assign
                   </div>
+                  {familyMembers.length === 0 ? (
+                    <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>
+                      Loading family members…
+                    </div>
+                  ) : (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                     {ADULTS.map(m => {
                       const on = sel.involvedIds.includes(m.id)
@@ -682,6 +687,7 @@ export default function AdminSetupClient() {
                       )
                     })}
                   </div>
+                  )}
                 </div>
 
                 {/* Transport */}
