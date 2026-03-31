@@ -264,7 +264,7 @@ export default function AdminSetupClient() {
             <p style={{ fontSize: 14, color: '#8B8599', marginBottom: 20 }}>
               Click "Load Calendar" above to pull this week's events from your Google Calendar.
             </p>
-            <button style={{ ...s.btnPri }} onClick={handleSync}>
+            <button style={{ ...s.btnPri }} onClick={() => handleSync(weekOffset)}>
               <RefreshCw size={14} /> Load Calendar
             </button>
           </div>
