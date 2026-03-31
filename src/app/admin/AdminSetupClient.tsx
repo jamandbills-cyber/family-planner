@@ -3,11 +3,14 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { signOut } from 'next-auth/react'
 import {
-  Calendar, RefreshCw, Plus, X, Car, CheckCircle, AlertTriangle,
+  Calendar, RefreshCw, Plus, X, CheckCircle, AlertTriangle,
   Clock, ChevronDown, ChevronUp, Undo2, Send, Loader2, LogOut
 } from 'lucide-react'
 import type { CalendarEvent, DinnerEntry } from '@/lib/types'
-import { FAMILY_MEMBERS, ADULTS, KIDS, getMember } from '@/lib/family'
+
+// Family members loaded dynamically from Google Sheets
+// These are fallbacks used only before the API loads
+const DEFAULT_FAMILY = { adults: [], kids: [], all: [], getMember: (_id: string) => undefined }
 
 // ─── Week display helpers ─────────────────────────────────────
 const WEEK_LABELS = [
@@ -268,8 +271,21 @@ export default function AdminSetupClient() {
   const [syncError,   setSyncError]   = useState<string | null>(null)
   const [selectedId,  setSelectedId]  = useState<string | null>(null)
   const [saveStatus,  setSaveStatus]  = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [weekStartKey, setWeekStartKey] = useState<string | null>(null)
+  const [weekStartKey,setWeekStartKey]= useState<string | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ─── Family members from Google Sheets ───────────────────────
+  const [familyMembers, setFamilyMembers] = useState<any[]>([])
+  const ADULTS     = familyMembers.filter(m => m.type === 'adult')
+  const KIDS       = familyMembers.filter(m => m.type === 'child')
+  const getMember  = (id: string) => familyMembers.find(m => m.id === id)
+
+  useEffect(() => {
+    fetch('/api/family')
+      .then(r => r.json())
+      .then(data => { if (data.members) setFamilyMembers(data.members) })
+      .catch(() => {}) // silently fail — family.ts fallback still works
+  }, [])
 
   // ─── Build state snapshot for saving ─────────────────────────
   const getSnapshot = useCallback(() => ({
