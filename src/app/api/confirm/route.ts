@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// ─── Create calendar events for each driver assignment ────────
+// ─── Update existing calendar events with driver info ─────────
 async function createDriverCalendarEvents(
   accessToken: string,
   plan: any,
@@ -74,10 +74,8 @@ async function createDriverCalendarEvents(
   const calendarId = process.env.GOOGLE_CALENDAR_ID ?? 'primary'
 
   const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
-
-  // Parse weekStart to get actual dates
   const wsDate = new Date(weekStart + 'T00:00:00')
-  let created = 0
+  let updated = 0
 
   for (const day of (plan.schedule ?? [])) {
     const dayIdx = DAYS.indexOf(day.day)
@@ -90,66 +88,38 @@ async function createDriverCalendarEvents(
     for (const evt of (day.events ?? [])) {
       if (!evt.driver || !evt.title) continue
 
-      // Parse time string to get start/end
-      const times = parseTimeRange(evt.time, dateStr)
-      if (!times) continue
-
       try {
-        await calendar.events.insert({
+        // Search for the existing event on this date
+        const listRes = await calendar.events.list({
           calendarId,
-          requestBody: {
-            summary:     `🚗 Drive: ${evt.title}`,
-            description: `${evt.driver} is driving for this event.\n\nLocation: ${evt.location ?? ''}`,
-            location:    evt.location ?? '',
-            start:       { dateTime: times.start, timeZone: 'America/Denver' },
-            end:         { dateTime: times.end,   timeZone: 'America/Denver' },
-            colorId:     '11', // tomato red
-          },
+          timeMin: `${dateStr}T00:00:00-06:00`,
+          timeMax: `${dateStr}T23:59:59-06:00`,
+          q: evt.title,
+          singleEvents: true,
         })
-        created++
+
+        const existing = listRes.data.items?.find(e =>
+          e.summary?.toLowerCase().includes(evt.title.toLowerCase()) ||
+          evt.title.toLowerCase().includes((e.summary ?? '').toLowerCase())
+        )
+
+        if (existing?.id) {
+          // Update the existing event with driver info
+          await calendar.events.patch({
+            calendarId,
+            eventId: existing.id,
+            requestBody: {
+              description: `🚗 Driver: ${evt.driver}\n\n${existing.description ?? ''}`.trim(),
+              colorId: '11', // tomato to indicate driver assigned
+            },
+          })
+          updated++
+        }
       } catch (err) {
-        console.error('Calendar event create error:', err)
+        console.error('Calendar event update error:', err)
       }
     }
   }
 
-  return created
-}
-
-// ─── Parse "4:00–6:00 PM" or "4:00 PM" into ISO datetimes ────
-function parseTimeRange(timeStr: string, dateStr: string): { start: string; end: string } | null {
-  if (!timeStr || timeStr === 'All Day') return null
-
-  const rangeMatch = timeStr.match(/(\d+):?(\d*)\s*(AM|PM)?\s*[–-]\s*(\d+):?(\d*)\s*(AM|PM)/i)
-  const singleMatch = timeStr.match(/(\d+):?(\d*)\s*(AM|PM)/i)
-
-  function toISO(h: number, m: number): string {
-    const d = new Date(`${dateStr}T00:00:00`)
-    d.setHours(h, m, 0, 0)
-    return d.toISOString().replace('.000Z', '-06:00').slice(0, 19) + '-06:00'
-  }
-
-  function parseHour(h: string, m: string, period: string): number {
-    let hour = parseInt(h)
-    const mins = parseInt(m || '0')
-    if (period?.toUpperCase() === 'PM' && hour !== 12) hour += 12
-    if (period?.toUpperCase() === 'AM' && hour === 12) hour = 0
-    return hour
-  }
-
-  if (rangeMatch) {
-    const startH = parseHour(rangeMatch[1], rangeMatch[2], rangeMatch[3] ?? rangeMatch[6])
-    const endH   = parseHour(rangeMatch[4], rangeMatch[5], rangeMatch[6])
-    const startM = parseInt(rangeMatch[2] || '0')
-    const endM   = parseInt(rangeMatch[5] || '0')
-    return { start: toISO(startH, startM), end: toISO(endH, endM) }
-  }
-
-  if (singleMatch) {
-    const h = parseHour(singleMatch[1], singleMatch[2], singleMatch[3])
-    const m = parseInt(singleMatch[2] || '0')
-    return { start: toISO(h, m), end: toISO(h + 1, m) } // default 1 hour
-  }
-
-  return null
+  return updated
 }
