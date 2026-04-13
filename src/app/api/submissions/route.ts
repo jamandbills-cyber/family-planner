@@ -1,31 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { getSubmissions } from '@/lib/sheets'
+import { google } from 'googleapis'
+
+const SHEETS_ID = process.env.GOOGLE_SHEETS_ID!
+
+function getServiceClient() {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
+  if (!raw) throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY not set')
+  const key = JSON.parse(raw)
+  const auth = new google.auth.GoogleAuth({
+    credentials: key,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+  })
+  return google.sheets({ version: 'v4', auth })
+}
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session?.accessToken) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
   const weekStart = req.nextUrl.searchParams.get('weekStart')
   if (!weekStart) {
     return NextResponse.json({ error: 'weekStart required' }, { status: 400 })
   }
 
   try {
-    const raw = await getSubmissions(session.accessToken, weekStart)
+    const sheets = getServiceClient()
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEETS_ID,
+      range: 'Submissions!A2:E1000',
+    })
 
-    // Parse payloads
-    const parsed = raw.map(s => ({
-      memberId:    s.memberId,
-      formType:    s.formType,
-      submittedAt: s.submittedAt,
-      payload:     typeof s.payload === 'string' ? JSON.parse(s.payload) : s.payload,
-    }))
+    const rows = (res.data.values ?? []) as string[][]
 
-    // Keep only the most recent submission per member
+    const parsed = rows
+      .filter(r => r[3] === weekStart)
+      .map(r => ({
+        submittedAt: r[0],
+        memberId:    r[1],
+        formType:    r[2],
+        weekStart:   r[3],
+        payload:     (() => {
+          try { return JSON.parse(r[4] ?? '{}') }
+          catch { return {} }
+        })(),
+      }))
+
+    // Keep only most recent per member
     const byMember = new Map<string, typeof parsed[0]>()
     for (const sub of parsed) {
       const existing = byMember.get(sub.memberId)
