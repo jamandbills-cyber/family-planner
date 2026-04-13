@@ -768,7 +768,8 @@ export default function AdminSetupClient() {
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
       const data = await res.json()
 
-      const incoming = data.events as CalendarEvent[]
+      const incoming = (data.events as CalendarEvent[])
+        .filter(e => !e.id?.startsWith('school_') && !e.title?.toLowerCase().includes('school drop') && !e.title?.toLowerCase().includes('school pick'))
       const weekStartStr = data.weekStart as string
 
       // Fetch saved admin state for this week
