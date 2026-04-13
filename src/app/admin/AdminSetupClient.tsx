@@ -479,14 +479,24 @@ function SendFormsButton({ weekStartKey }: { weekStartKey: string | null }) {
   }
 
   if (status === 'sent' && results) return (
-    <div style={{ padding: '12px 16px', background: 'rgba(74,222,128,0.1)', borderRadius: 8, border: '1px solid rgba(74,222,128,0.3)' }}>
-      <div style={{ fontSize: 13, color: '#4ADE80', fontWeight: 600, marginBottom: results.failed.length ? 4 : 0 }}>
-        ✓ Forms sent to {results.sent.length} {results.sent.length === 1 ? 'person' : 'people'}
-        {results.sent.length > 0 && <span style={{ fontWeight: 400, opacity: 0.7 }}> — {results.sent.join(', ')}</span>}
-      </div>
+    <div style={{ padding: '12px 16px', background: results.sent.length > 0 ? 'rgba(74,222,128,0.1)' : 'rgba(239,68,68,0.1)', borderRadius: 8, border: `1px solid ${results.sent.length > 0 ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
+      {results.sent.length > 0 ? (
+        <div style={{ fontSize: 13, color: '#4ADE80', fontWeight: 600, marginBottom: results.failed.length ? 4 : 0 }}>
+          ✓ Texts sent to {results.sent.length} {results.sent.length === 1 ? 'person' : 'people'} — {results.sent.join(', ')}
+        </div>
+      ) : (
+        <div style={{ fontSize: 13, color: '#FCA5A5', fontWeight: 600, marginBottom: 4 }}>
+          ⚠ No texts were sent — phone numbers may be missing or incorrectly formatted
+        </div>
+      )}
       {results.failed.length > 0 && (
         <div style={{ fontSize: 12, color: '#FCA5A5', marginTop: 4 }}>
-          ⚠ Failed: {results.failed.join(', ')} — check phone numbers in the Family sheet
+          Failed: {results.failed.join(', ')} — numbers must be in +18015551234 format in the Family sheet
+        </div>
+      )}
+      {results.sent.length === 0 && (
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 6 }}>
+          Open your Family sheet → check column D (phone) → format must be +1XXXXXXXXXX
         </div>
       )}
     </div>
@@ -633,16 +643,32 @@ export default function AdminSetupClient() {
   const [familyMembers, setFamilyMembers] = useState<any[]>(FAMILY_MEMBERS)
   const ADULTS     = familyMembers.filter(m => m.type === 'adult')
   const KIDS       = familyMembers.filter(m => m.type === 'child')
+  const DRIVERS    = familyMembers.filter(m => m.canDrive === true || m.type === 'adult')
   const getMember  = (id: string) => familyMembers.find(m => m.id === id)
+
+  // ─── Submission counter ───────────────────────────────────────
+  const [submissionCount, setSubmissionCount] = useState(0)
 
   useEffect(() => {
     fetch('/api/family')
       .then(r => r.json())
-      .then(data => {
-        if (data.members?.length > 0) setFamilyMembers(data.members)
-      })
-      .catch(() => {}) // silently fail — family.ts data stays in place
+      .then(data => { if (data.members?.length > 0) setFamilyMembers(data.members) })
+      .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (!weekStartKey) return
+    const fetchCount = async () => {
+      try {
+        const res  = await fetch(`/api/submissions?weekStart=${weekStartKey}`)
+        const data = await res.json()
+        setSubmissionCount(data.submissions?.length ?? 0)
+      } catch {}
+    }
+    fetchCount()
+    const interval = setInterval(fetchCount, 60_000)
+    return () => clearInterval(interval)
+  }, [weekStartKey])
 
   // ─── Build state snapshot for saving ─────────────────────────
   const getSnapshot = useCallback(() => ({
@@ -685,7 +711,14 @@ export default function AdminSetupClient() {
       const res = await fetch(`/api/admin-state?weekStart=${weekStart}`)
       if (!res.ok) return
       const data = await res.json()
-      if (!data.found) return
+      if (!data.found) {
+        // New week — clear old state so we start fresh
+        setEvents([])
+        setDinner(WEEK_LABELS.map((_, i) => ({ dayIdx: i, meal: '', cook: '' })))
+        setAgenda([])
+        setIsReady(false)
+        return
+      }
       const saved = data.state
       if (saved.events?.length)        setEvents(saved.events)
       if (saved.dinner)                setDinner(saved.dinner)
@@ -842,6 +875,11 @@ export default function AdminSetupClient() {
             {saveStatus === 'saved'  && <span style={{ fontSize: 12, color: '#4ADE80' }}>✓ Saved</span>}
             {saveStatus === 'error'  && <span style={{ fontSize: 12, color: '#FCA5A5' }}>⚠ Save failed</span>}
             {lastSynced && <span style={{ fontSize: 12, color: '#7070A0' }}>Synced: {lastSynced}</span>}
+            {weekStartKey && (
+              <span style={{ fontSize: 12, background: submissionCount === familyMembers.length && familyMembers.length > 0 ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.08)', color: submissionCount === familyMembers.length && familyMembers.length > 0 ? '#4ADE80' : 'rgba(255,255,255,0.6)', border: `1px solid ${submissionCount === familyMembers.length && familyMembers.length > 0 ? 'rgba(74,222,128,0.3)' : 'rgba(255,255,255,0.15)'}`, borderRadius: 8, padding: '5px 10px', fontWeight: 600 }}>
+                {submissionCount}/{familyMembers.length} submitted
+              </span>
+            )}
             <button onClick={() => handleSync(weekOffset)} disabled={syncing}
               style={{ background: 'rgba(255,255,255,0.07)', border: '1.5px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'DM Sans',sans-serif" }}>
               {syncing
@@ -1081,8 +1119,8 @@ export default function AdminSetupClient() {
                       <select value={sel.driverId ?? ''} onChange={e => assignDriver(sel.id, e.target.value)}
                         style={{ ...s.select, background: '#fff', border: '1.5px solid rgba(255,255,255,0.4)', color: '#1A1A2E' }}>
                         <option value="">— Assign driver —</option>
-                        {ADULTS.map(a => (
-                          <option key={a.id} value={a.id} style={{ color: '#1A1A2E', background: '#fff' }}>{a.name}</option>
+                        {DRIVERS.map(a => (
+                          <option key={a.id} value={a.id} style={{ color: '#1A1A2E', background: '#fff' }}>{a.name}{a.type === 'child' ? ' (teen)' : ''}</option>
                         ))}
                         <option value="__carpool__" style={{ color: '#1A1A2E', background: '#fff' }}>Outside carpool</option>
                       </select>

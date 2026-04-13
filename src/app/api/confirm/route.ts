@@ -30,7 +30,6 @@ export async function POST(req: NextRequest) {
     // 2. Get family members for emails and texts
     const members = await getFamilyMembers(accessToken)
     const adults  = members.filter(m => m.type === 'adult')
-    const all     = members.filter(m => m.phone && m.phone !== '+1XXXXXXXXXX')
 
     // 3. Send email to all adults with the full plan
     const emailAddresses = adults.map(m => m.email).filter(Boolean)
@@ -44,10 +43,11 @@ export async function POST(req: NextRequest) {
       results.emailSent = emailSent
     }
 
-    // 4. Text everyone the live plan link
-    const planUrl    = `${APP_URL}/plan`
+    // 4. Text adults only with the live plan link
+    const planUrl = `${APP_URL}/plan`
+    const textsTo = adults.filter(m => m.phone && !m.phone.includes('X'))
     const textResults = await Promise.allSettled(
-      all.map(m => sendSMS(m.phone, `Family plan for ${plan.weekLabel ?? 'this week'} is confirmed. View it here: ${planUrl}`))
+      textsTo.map(m => sendSMS(m.phone, `Family plan for ${plan.weekLabel ?? 'this week'} is confirmed. View it here: ${planUrl}`))
     )
     results.textsSent = textResults.filter(r => r.status === 'fulfilled' && r.value).length
 

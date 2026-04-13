@@ -45,6 +45,7 @@ export default function AdultFormPage() {
         for (const evts of Object.values(data.eventsByDay ?? {})) {
           for (const e of evts as any[]) {
             if (e.needsDriver) dm[e.id] = false
+            // Pre-assigned drivers don't need a toggle
           }
         }
         setDriveMap(dm)
@@ -175,10 +176,10 @@ export default function AdultFormPage() {
                           const active = sa[slot]
                           return (
                             <button key={slot} onClick={() => toggleSchool(day, slot)}
-                              style={{ flex:1, padding:'5px 2px', borderRadius:5, fontSize:10, fontWeight:active?700:400, cursor:'pointer', fontFamily:"'DM Sans',sans-serif", textAlign:'center',
-                                background: active ? '#1D4ED8' : '#fff',
-                                border: `1.5px solid ${active ? '#1D4ED8' : '#BFDBFE'}`,
-                                color: active ? '#fff' : '#93C5FD',
+                              style={{ flex:1, padding:'5px 2px', borderRadius:5, fontSize:10, fontWeight:active?700:500, cursor:'pointer', fontFamily:"'DM Sans',sans-serif", textAlign:'center',
+                                background: active ? '#1D4ED8' : '#FEF2F2',
+                                border: `1.5px solid ${active ? '#1D4ED8' : '#FECACA'}`,
+                                color: active ? '#fff' : '#DC2626',
                               }}>
                               🏫 {slot.toUpperCase()}
                             </button>
@@ -196,14 +197,21 @@ export default function AdultFormPage() {
                         const isSchool   = evt.id?.startsWith('school_')
                         const canDrive   = driveMap[evt.id] ?? false
                         const needsDrv   = evt.needsDriver
+                        const amIDriver  = evt.amDriver === true
 
                         return (
                           <div key={evt.id} style={{ padding:'5px 6px', borderRadius:6, fontSize:10,
-                            background: isSchool ? '#EFF6FF' : needsDrv && canDrive ? '#F0FDF4' : needsDrv ? '#FFFBEB' : '#F7F4EF',
-                            border: `1px solid ${isSchool ? '#BFDBFE' : needsDrv && canDrive ? '#BBF7D0' : needsDrv ? '#FDE68A' : '#EDE8E0'}`,
+                            background: isSchool ? '#EFF6FF' : amIDriver ? '#F0FDF4' : needsDrv && canDrive ? '#F0FDF4' : needsDrv ? '#FFFBEB' : '#F7F4EF',
+                            border: `1px solid ${isSchool ? '#BFDBFE' : amIDriver ? '#BBF7D0' : needsDrv && canDrive ? '#BBF7D0' : needsDrv ? '#FDE68A' : '#EDE8E0'}`,
+                            borderLeft: `3px solid ${amIDriver ? '#16A34A' : isSchool ? '#1D4ED8' : '#E2DDD6'}`,
                           }}>
                             <div style={{ fontWeight:600, color:'#1A1A2E', lineHeight:1.3 }}>{evt.title}</div>
-                            <div style={{ color:'#8B8599', marginBottom: needsDrv ? 4 : 0 }}>{evt.time}</div>
+                            <div style={{ color:'#8B8599', marginBottom: (needsDrv || amIDriver) ? 4 : 0 }}>{evt.time}</div>
+                            {amIDriver && (
+                              <div style={{ fontSize:9, color:'#15803D', fontWeight:700, display:'flex', alignItems:'center', gap:3 }}>
+                                🔒 You're driving this
+                              </div>
+                            )}
                             {needsDrv && (
                               <button onClick={() => toggleDrive(evt.id)}
                                 style={{ width:'100%', padding:'3px', borderRadius:4, fontSize:9, fontWeight:700, cursor:'pointer', fontFamily:"'DM Sans',sans-serif",

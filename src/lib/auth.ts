@@ -6,6 +6,33 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? '')
   .map(e => e.trim().toLowerCase())
   .filter(Boolean)
 
+async function refreshAccessToken(token: any) {
+  try {
+    const url = 'https://oauth2.googleapis.com/token'
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id:     process.env.GOOGLE_CLIENT_ID!,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+        grant_type:    'refresh_token',
+        refresh_token: token.refreshToken,
+      }),
+    })
+    const refreshed = await res.json()
+    if (!res.ok) throw refreshed
+    return {
+      ...token,
+      accessToken:  refreshed.access_token,
+      expiresAt:    Math.floor(Date.now() / 1000) + refreshed.expires_in,
+      refreshToken: refreshed.refresh_token ?? token.refreshToken,
+    }
+  } catch (err) {
+    console.error('Token refresh failed:', err)
+    return { ...token, error: 'RefreshAccessTokenError' }
+  }
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
@@ -13,8 +40,6 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
-          // Request offline access so we get a refresh token,
-          // and calendar.readonly so we can read the family calendar.
           scope: [
             'openid',
             'email',
@@ -31,42 +56,51 @@ export const authOptions: NextAuthOptions = {
   ],
 
   callbacks: {
-    // Persist the access token and refresh token in the JWT
     async jwt({ token, account }) {
+      // Initial sign in
       if (account) {
-        token.accessToken  = account.access_token
-        token.refreshToken = account.refresh_token
-        token.expiresAt    = account.expires_at
+        return {
+          ...token,
+          accessToken:  account.access_token,
+          refreshToken: account.refresh_token,
+          expiresAt:    account.expires_at,
+        }
       }
-      return token
+      // Return token if not expired (5 min buffer)
+      if (Date.now() < ((token.expiresAt as number) - 300) * 1000) {
+        return token
+      }
+      // Token expired — refresh it
+      return refreshAccessToken(token)
     },
 
-    // Expose the access token to the client session
     async session({ session, token }) {
-      session.accessToken  = token.accessToken  as string
+      session.accessToken  = token.accessToken as string
       session.refreshToken = token.refreshToken as string
+      if (token.error) {
+        (session as any).error = token.error
+      }
       return session
     },
 
-    // Only allow admin emails through
     async signIn({ user }) {
       if (!user.email) return false
-      if (ADMIN_EMAILS.length === 0) return true // no restriction if not configured
+      if (ADMIN_EMAILS.length === 0) return true
       return ADMIN_EMAILS.includes(user.email.toLowerCase())
     },
   },
 
   pages: {
-    signIn:  '/auth/signin',
-    error:   '/auth/error',
+    signIn: '/auth/signin',
+    error:  '/auth/error',
   },
 }
 
-// Extend next-auth types to include our extra fields
 declare module 'next-auth' {
   interface Session {
     accessToken:  string
     refreshToken: string
+    error?:       string
   }
 }
 declare module 'next-auth/jwt' {
@@ -74,5 +108,6 @@ declare module 'next-auth/jwt' {
     accessToken?:  string
     refreshToken?: string
     expiresAt?:    number
+    error?:        string
   }
 }

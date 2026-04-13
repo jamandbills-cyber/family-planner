@@ -101,8 +101,23 @@ export default function MeetingPage() {
   const getMemberName = (memberList, id) => memberList.find(m => m.id === id)?.name ?? id
   const getMember = id => members.find(m => m.id === id)
 
-  const assignDriver = (eventId, val) =>
-    setEvents(evs => evs.map(e => e.id === eventId ? { ...e, driverId: val || null } : e))
+  const assignDriver = (eventId, val) => {
+    setEvents(evs => {
+      const updated = evs.map(e => e.id === eventId ? { ...e, driverId: val || null } : e)
+      // Auto-save assignments back to AdminState
+      if (weekStart) {
+        fetch('/api/admin-state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            weekStart,
+            state: { events: updated, dinner, agenda }
+          })
+        }).catch(() => {})
+      }
+      return updated
+    })
+  }
 
   const toggleShopping = id =>
     setShopping(s => s.map(i => i.id === id ? { ...i, checked: !i.checked } : i))

@@ -2,24 +2,21 @@ import { google } from 'googleapis'
 
 const SHEETS_ID = process.env.GOOGLE_SHEETS_ID!
 
-// ─── Auth ─────────────────────────────────────────────────────
+// ─── Auth helpers ──────────────────────────────────────────────
 function getSheetsClient(accessToken: string) {
   const auth = new google.auth.OAuth2()
   auth.setCredentials({ access_token: accessToken })
   return google.sheets({ version: 'v4', auth })
 }
 
-// ─── Read a range from the sheet ─────────────────────────────
+// ─── Read a range ─────────────────────────────────────────────
 async function readRange(accessToken: string, range: string): Promise<string[][]> {
   const sheets = getSheetsClient(accessToken)
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: SHEETS_ID,
-    range,
-  })
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEETS_ID, range })
   return (res.data.values ?? []) as string[][]
 }
 
-// ─── Append rows to a sheet ───────────────────────────────────
+// ─── Append rows ──────────────────────────────────────────────
 async function appendRows(accessToken: string, range: string, rows: string[][]) {
   const sheets = getSheetsClient(accessToken)
   await sheets.spreadsheets.values.append({
@@ -31,7 +28,7 @@ async function appendRows(accessToken: string, range: string, rows: string[][]) 
   })
 }
 
-// ─── Write to a specific range (overwrite) ────────────────────
+// ─── Write to range ───────────────────────────────────────────
 async function writeRange(accessToken: string, range: string, rows: string[][]) {
   const sheets = getSheetsClient(accessToken)
   await sheets.spreadsheets.values.update({
@@ -42,53 +39,52 @@ async function writeRange(accessToken: string, range: string, rows: string[][]) 
   })
 }
 
-// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // FAMILY MEMBERS
-// ═══════════════════════════════════════════════════════════
+// Sheet "Family": id, name, type, phone, email, color, canDrive
+// ═══════════════════════════════════════════════════════════════
 
 export interface SheetMember {
-  id: string
-  name: string
-  type: 'adult' | 'child'
-  phone: string
-  email: string
-  color: string
+  id:       string
+  name:     string
+  type:     'adult' | 'child'
+  phone:    string
+  email:    string
+  color:    string
+  canDrive: boolean
 }
 
 export async function getFamilyMembers(accessToken: string): Promise<SheetMember[]> {
-  // Sheet: "Family" with columns: id, name, type, phone, email, color
-  const rows = await readRange(accessToken, 'Family!A2:F100')
+  const rows = await readRange(accessToken, 'Family!A2:G100')
   return rows
-    .filter(r => r[0]) // skip empty rows
+    .filter(r => r[0])
     .map(r => ({
-      id:    r[0]?.trim() ?? '',
-      name:  r[1]?.trim() ?? '',
-      type:  (r[2]?.trim() ?? 'adult') as 'adult' | 'child',
-      phone: r[3]?.trim() ?? '',
-      email: r[4]?.trim() ?? '',
-      color: r[5]?.trim() ?? '#8B8599',
+      id:       r[0]?.trim() ?? '',
+      name:     r[1]?.trim() ?? '',
+      type:     (r[2]?.trim() ?? 'adult') as 'adult' | 'child',
+      phone:    r[3]?.trim() ?? '',
+      email:    r[4]?.trim() ?? '',
+      color:    r[5]?.trim() ?? '#8B8599',
+      canDrive: r[6]?.trim().toLowerCase() === 'true',
     }))
 }
 
-// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // FORM TOKENS
-// Stored in sheet "Tokens": token, memberId, weekStart, formType, usedAt
-// ═══════════════════════════════════════════════════════════
+// Sheet "Tokens": token, memberId, weekStart, formType, usedAt
+// ═══════════════════════════════════════════════════════════════
 
 export interface TokenRecord {
-  token: string
-  memberId: string
+  token:     string
+  memberId:  string
   weekStart: string
-  formType: 'kid' | 'adult'
-  usedAt: string
+  formType:  'kid' | 'adult'
+  usedAt:    string
 }
 
-export async function getToken(
-  accessToken: string,
-  token: string
-): Promise<TokenRecord | null> {
+export async function getToken(accessToken: string, token: string): Promise<TokenRecord | null> {
   const rows = await readRange(accessToken, 'Tokens!A2:E500')
-  const row = rows.find(r => r[0] === token)
+  const row  = rows.find(r => r[0] === token)
   if (!row) return null
   return {
     token:     row[0],
@@ -99,18 +95,15 @@ export async function getToken(
   }
 }
 
-export async function saveTokens(
-  accessToken: string,
-  tokens: Omit<TokenRecord, 'usedAt'>[]
-) {
+export async function saveTokens(accessToken: string, tokens: Omit<TokenRecord, 'usedAt'>[]) {
   const rows = tokens.map(t => [t.token, t.memberId, t.weekStart, t.formType, ''])
   await appendRows(accessToken, 'Tokens!A:E', rows)
 }
 
-// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // FORM SUBMISSIONS
-// Sheet "Submissions": submittedAt, memberId, formType, weekStart, payload (JSON)
-// ═══════════════════════════════════════════════════════════
+// Sheet "Submissions": submittedAt, memberId, formType, weekStart, payload
+// ═══════════════════════════════════════════════════════════════
 
 export async function saveSubmission(
   accessToken: string,
@@ -144,16 +137,12 @@ export async function getSubmissions(
     }))
 }
 
-// ═══════════════════════════════════════════════════════════
-// WEEKLY PLAN (confirmed plan stored for live page)
+// ═══════════════════════════════════════════════════════════════
+// WEEKLY PLAN
 // Sheet "Plans": weekStart, confirmedAt, planJSON
-// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
-export async function savePlan(
-  accessToken: string,
-  weekStart: string,
-  plan: object
-) {
+export async function savePlan(accessToken: string, weekStart: string, plan: object) {
   await appendRows(accessToken, 'Plans!A:C', [[
     weekStart,
     new Date().toISOString(),

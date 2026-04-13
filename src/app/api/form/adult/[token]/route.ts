@@ -89,7 +89,10 @@ export async function GET(
         location:        e.location ?? '',
         transportStatus: e.transportStatus ?? 'unset',
         driverId:        e.driverId ?? null,
+        // needsDriver = unassigned event that needs someone to volunteer
         needsDriver:     e.transportStatus === 'needs_driver' && !e.driverId && !e.id?.startsWith('school_'),
+        // amDriver = admin already assigned THIS person as driver
+        amDriver:        e.transportStatus === 'needs_driver' && e.driverId === member.id && !e.id?.startsWith('school_'),
       })
     }
 
