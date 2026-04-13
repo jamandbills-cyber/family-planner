@@ -37,11 +37,12 @@ const SCHOOL_KIDS = ['boston', 'hailee', 'sadie']
 const SCHOOL_DAYS = [1, 2, 3, 4, 5] // Mon=1 … Fri=5 (matches dayIdx with Sun=0)
 
 const DEFAULT_SCHOOL = {
-  dropoffTime: '7:30 AM',
-  pickupTime:  '3:00 PM',
+  dropoffTime:     '7:30 AM',
+  pickupTime:      '3:00 PM',
   dropoffDriverId: '',
   pickupDriverId:  '',
-  noSchool: [] as number[], // dayIdx values where school is cancelled
+  noSchool:        [] as number[], // whole days off
+  removedEvents:   [] as string[], // one-off removed event IDs
 }
 
 // ─── Test Links Panel ─────────────────────────────────────────
@@ -300,65 +301,19 @@ function PreviewPlan({ events, dinner, agenda, weekLabel, members }: any) {
 }
 
 // ─── School Schedule sub-component ───────────────────────────
-function SchoolSchedule({ events, setEvents, weekDates, adults, s }: any) {
-  const [open,   setOpen]   = useState(false)
-  const [config, setConfig] = useState(DEFAULT_SCHOOL)
+function SchoolSchedule({ config, setConfig, adults, s }: any) {
+  const [open, setOpen] = useState(false)
 
   const WEEK_DAYS_LABEL = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 
-  const applyToCalendar = () => {
-    // Remove any existing school events first
-    const withoutSchool = events.filter((e: any) => !e.id.startsWith('school_'))
-
-    const schoolEvents: any[] = []
-    SCHOOL_DAYS.forEach(dayIdx => {
-      if (config.noSchool.includes(dayIdx)) return
-      const dateLabel = weekDates[dayIdx] ?? ''
-      // Drop-off
-      schoolEvents.push({
-        id: `school_drop_${dayIdx}`,
-        title: `School Drop-off (Boston, Hailee, Sadie)`,
-        dayIdx,
-        time: config.dropoffTime,
-        sortMin: parseTimeToMin(config.dropoffTime),
-        location: 'School',
-        allDay: false,
-        involvedIds: SCHOOL_KIDS,
-        transportStatus: 'needs_driver',
-        driverId: config.dropoffDriverId || null,
-        standingRuleId: null,
-        carpoolNote: '',
-      })
-      // Pick-up
-      schoolEvents.push({
-        id: `school_pickup_${dayIdx}`,
-        title: `School Pick-up (Boston, Hailee, Sadie)`,
-        dayIdx,
-        time: config.pickupTime,
-        sortMin: parseTimeToMin(config.pickupTime),
-        location: 'School',
-        allDay: false,
-        involvedIds: SCHOOL_KIDS,
-        transportStatus: 'needs_driver',
-        driverId: config.pickupDriverId || null,
-        standingRuleId: null,
-        carpoolNote: '',
-      })
-    })
-
-    setEvents([...withoutSchool, ...schoolEvents])
-  }
-
   const toggleNoSchool = (dayIdx: number) => {
-    setConfig(c => ({
+    setConfig((c: any) => ({
       ...c,
       noSchool: c.noSchool.includes(dayIdx)
-        ? c.noSchool.filter(d => d !== dayIdx)
+        ? c.noSchool.filter((d: number) => d !== dayIdx)
         : [...c.noSchool, dayIdx]
     }))
   }
-
-  const schoolEventsInCalendar = events.filter((e: any) => e.id.startsWith('school_')).length
 
   return (
     <div style={s.card}>
@@ -367,10 +322,7 @@ function SchoolSchedule({ events, setEvents, weekDates, adults, s }: any) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 16 }}>🏫</span>
           <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, fontWeight: 600, color: '#1A1A2E' }}>School Schedule</span>
-          {schoolEventsInCalendar > 0
-            ? <span style={{ fontSize: 11, background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>Added to calendar ✓</span>
-            : <span style={{ fontSize: 11, background: '#F0EDE8', color: '#8B8599', padding: '2px 8px', borderRadius: 10 }}>Boston · Hailee · Sadie</span>
-          }
+          <span style={{ fontSize: 11, background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>Auto-generates on sync ✓</span>
         </div>
         {open ? <ChevronUp size={15} color="#8B8599" /> : <ChevronDown size={15} color="#8B8599" />}
       </button>
@@ -378,7 +330,7 @@ function SchoolSchedule({ events, setEvents, weekDates, adults, s }: any) {
       {open && (
         <div style={{ padding: '0 20px 20px', borderTop: '1px solid #F0EDE8' }}>
           <p style={{ fontSize: 13, color: '#8B8599', margin: '12px 0 16px', lineHeight: 1.5 }}>
-            Boston, Hailee, and Sadie have school Monday–Friday. Set the times and default drivers, then apply to the calendar.
+            School events generate automatically every time you sync. Changes here take effect on the next Re-sync.
           </p>
 
           {/* Times */}
@@ -386,13 +338,13 @@ function SchoolSchedule({ events, setEvents, weekDates, adults, s }: any) {
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#8B8599', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Drop-off time</div>
               <input type="text" value={config.dropoffTime}
-                onChange={e => setConfig(c => ({ ...c, dropoffTime: e.target.value }))}
+                onChange={e => setConfig((c: any) => ({ ...c, dropoffTime: e.target.value }))}
                 style={{ ...s.field, fontSize: 13, padding: '8px 10px' }} placeholder="e.g. 7:30 AM" />
             </div>
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#8B8599', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Pick-up time</div>
               <input type="text" value={config.pickupTime}
-                onChange={e => setConfig(c => ({ ...c, pickupTime: e.target.value }))}
+                onChange={e => setConfig((c: any) => ({ ...c, pickupTime: e.target.value }))}
                 style={{ ...s.field, fontSize: 13, padding: '8px 10px' }} placeholder="e.g. 3:00 PM" />
             </div>
           </div>
@@ -401,22 +353,22 @@ function SchoolSchedule({ events, setEvents, weekDates, adults, s }: any) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#8B8599', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Default drop-off driver</div>
-              <select value={config.dropoffDriverId} onChange={e => setConfig(c => ({ ...c, dropoffDriverId: e.target.value }))} style={{ ...s.select, width: '100%' }}>
-                <option value="">— Set per day in calendar —</option>
+              <select value={config.dropoffDriverId} onChange={e => setConfig((c: any) => ({ ...c, dropoffDriverId: e.target.value }))} style={{ ...s.select, width: '100%' }}>
+                <option value="">— None —</option>
                 {adults.map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             </div>
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#8B8599', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Default pick-up driver</div>
-              <select value={config.pickupDriverId} onChange={e => setConfig(c => ({ ...c, pickupDriverId: e.target.value }))} style={{ ...s.select, width: '100%' }}>
-                <option value="">— Set per day in calendar —</option>
+              <select value={config.pickupDriverId} onChange={e => setConfig((c: any) => ({ ...c, pickupDriverId: e.target.value }))} style={{ ...s.select, width: '100%' }}>
+                <option value="">— None —</option>
                 {adults.map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             </div>
           </div>
 
           {/* No school days */}
-          <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 8 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#8B8599', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>No school this week?</div>
             <div style={{ display: 'flex', gap: 8 }}>
               {SCHOOL_DAYS.map(dayIdx => {
@@ -430,11 +382,9 @@ function SchoolSchedule({ events, setEvents, weekDates, adults, s }: any) {
               })}
             </div>
           </div>
-
-          <button onClick={applyToCalendar}
-            style={{ ...s.btnPri, width: '100%', justifyContent: 'center', padding: '11px' }}>
-            {schoolEventsInCalendar > 0 ? '↺ Update School Events in Calendar' : '+ Add School Events to Calendar'}
-          </button>
+          <p style={{ fontSize: 12, color: '#8B8599', fontStyle: 'italic' }}>
+            Changes take effect on the next Re-sync. To remove a single day's event, click ✕ on the event chip in the calendar.
+          </p>
         </div>
       )}
     </div>
@@ -640,7 +590,8 @@ export default function AdminSetupClient() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ─── Family members — start with family.ts, upgrade from Sheet ──
-  const [familyMembers, setFamilyMembers] = useState<any[]>(FAMILY_MEMBERS)
+  const [familyMembers,  setFamilyMembers]  = useState<any[]>(FAMILY_MEMBERS)
+  const [schoolConfig,   setSchoolConfig]   = useState(DEFAULT_SCHOOL)
   const ADULTS     = familyMembers.filter(m => m.type === 'adult')
   const KIDS       = familyMembers.filter(m => m.type === 'child')
   const DRIVERS    = familyMembers.filter(m => m.canDrive === true || m.type === 'adult')
@@ -672,8 +623,8 @@ export default function AdminSetupClient() {
 
   // ─── Build state snapshot for saving ─────────────────────────
   const getSnapshot = useCallback(() => ({
-    events, dinner, agenda, deadline, deadlineDay, isReady
-  }), [events, dinner, agenda, deadline, deadlineDay, isReady])
+    events, dinner, agenda, deadline, deadlineDay, isReady, schoolConfig
+  }), [events, dinner, agenda, deadline, deadlineDay, isReady, schoolConfig])
 
   // ─── Save to Google Sheets (debounced 2s) ────────────────────
   const saveState = useCallback(async (weekStart: string, snapshot: object) => {
@@ -703,7 +654,7 @@ export default function AdminSetupClient() {
     if (weekStartKey && events.length > 0) {
       triggerSave(weekStartKey, getSnapshot())
     }
-  }, [events, dinner, agenda, deadline, deadlineDay, isReady])
+  }, [events, dinner, agenda, deadline, deadlineDay, isReady, schoolConfig])
 
   // ─── Load saved state for a given weekStart ───────────────────
   // IMPORTANT: When called after a calendar sync, we do NOT restore
@@ -759,6 +710,55 @@ export default function AdminSetupClient() {
     }
   }, [])
 
+  // ─── Build school events from config ─────────────────────────
+  const buildSchoolEvents = useCallback((config: typeof DEFAULT_SCHOOL) => {
+    const events: any[] = []
+    SCHOOL_DAYS.forEach(dayIdx => {
+      if (config.noSchool.includes(dayIdx)) return
+      const dropId    = `school_drop_${dayIdx}`
+      const pickupId  = `school_pickup_${dayIdx}`
+      if (!config.removedEvents.includes(dropId)) {
+        events.push({
+          id: dropId,
+          title: `School Drop-off (Boston, Hailee, Sadie)`,
+          dayIdx,
+          time: config.dropoffTime,
+          sortMin: parseTimeToMin(config.dropoffTime),
+          location: 'School',
+          allDay: false,
+          involvedIds: SCHOOL_KIDS,
+          transportStatus: 'needs_driver' as const,
+          driverId: config.dropoffDriverId || null,
+          standingRuleId: null,
+          carpoolNote: '',
+        })
+      }
+      if (!config.removedEvents.includes(pickupId)) {
+        events.push({
+          id: pickupId,
+          title: `School Pick-up (Boston, Hailee, Sadie)`,
+          dayIdx,
+          time: config.pickupTime,
+          sortMin: parseTimeToMin(config.pickupTime),
+          location: 'School',
+          allDay: false,
+          involvedIds: SCHOOL_KIDS,
+          transportStatus: 'needs_driver' as const,
+          driverId: config.pickupDriverId || null,
+          standingRuleId: null,
+          carpoolNote: '',
+        })
+      }
+    })
+    return events
+  }, [])
+
+  // ─── Remove a school event one-off ───────────────────────────
+  const removeSchoolEvent = (id: string) => {
+    setSchoolConfig(c => ({ ...c, removedEvents: [...c.removedEvents, id] }))
+    setEvents(evs => evs.filter(e => e.id !== id))
+  }
+
   // ─── Sync with Google Calendar ──────────────────────────────
   const handleSync = useCallback(async (offset: number = weekOffset) => {
     setSyncing(true)
@@ -780,11 +780,17 @@ export default function AdminSetupClient() {
       } catch { /* no saved state */ }
 
       const savedEvts: any[] = savedState?.events ?? []
+      const savedConfig = savedState?.schoolConfig ?? DEFAULT_SCHOOL
 
-      // Single setEvents call — do everything at once
-      setEvents(prev => {
-        // Preserve school events (locally generated, not in Google Calendar)
-        const schoolEvents = prev.filter(e => e.id?.startsWith('school_'))
+      // Restore school config from saved state
+      setSchoolConfig(savedConfig)
+
+      // Single setEvents call — everything at once
+      // Calendar is source of truth for which events exist
+      // School events auto-generated from saved config
+      setEvents(() => {
+        // Build school events from saved config
+        const schoolEvts = buildSchoolEvents(savedConfig)
 
         // For each incoming calendar event, apply any saved admin assignments
         const merged = incoming.map(evt => {
@@ -797,7 +803,7 @@ export default function AdminSetupClient() {
             saved.driverId
           )) {
             return {
-              ...evt, // fresh from calendar (correct id, time, location)
+              ...evt,
               involvedIds:     saved.involvedIds     ?? evt.involvedIds,
               transportStatus: saved.transportStatus ?? evt.transportStatus,
               driverId:        saved.driverId        ?? evt.driverId,
@@ -807,10 +813,10 @@ export default function AdminSetupClient() {
           return evt
         })
 
-        return [...merged, ...schoolEvents]
+        return [...merged, ...schoolEvts]
       })
 
-      // Restore metadata from saved state (dinner, agenda, etc)
+      // Restore metadata from saved state
       if (savedState) {
         if (savedState.dinner)                setDinner(savedState.dinner)
         if (savedState.agenda)                setAgenda(savedState.agenda)
@@ -1052,7 +1058,17 @@ export default function AdminSetupClient() {
                                       })
                                   }
                                 </div>
-                                <span style={{ fontSize: 10, color: sm.color }}>●</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                  {evt.id?.startsWith('school_') && (
+                                    <button
+                                      onClick={e => { e.stopPropagation(); removeSchoolEvent(evt.id) }}
+                                      title="Remove this school event this week"
+                                      style={{ background: 'rgba(239,68,68,0.12)', border: 'none', borderRadius: 3, cursor: 'pointer', padding: '1px 4px', fontSize: 8, color: '#DC2626', lineHeight: 1 }}>
+                                      ✕
+                                    </button>
+                                  )}
+                                  <span style={{ fontSize: 10, color: sm.color }}>●</span>
+                                </div>
                               </div>
                             </div>
                           )
@@ -1263,10 +1279,9 @@ export default function AdminSetupClient() {
 
         {/* ── SCHOOL SCHEDULE ──────────────────────────────────── */}
         <SchoolSchedule
-          events={events}
-          setEvents={setEvents}
-          weekDates={weekDates}
-          adults={ADULTS}
+          config={schoolConfig}
+          setConfig={setSchoolConfig}
+          adults={DRIVERS}
           s={s}
         />
 
