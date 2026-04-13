@@ -706,21 +706,47 @@ export default function AdminSetupClient() {
   }, [events, dinner, agenda, deadline, deadlineDay, isReady])
 
   // ─── Load saved state for a given weekStart ───────────────────
-  const loadState = useCallback(async (weekStart: string) => {
+  // IMPORTANT: When called after a calendar sync, we do NOT restore
+  // events from saved state — the calendar is the source of truth for
+  // which events exist. We only restore admin assignments by merging
+  // them into the already-set calendar events.
+  const loadState = useCallback(async (weekStart: string, calendarEvents?: CalendarEvent[]) => {
     try {
       const res = await fetch(`/api/admin-state?weekStart=${weekStart}`)
       if (!res.ok) return
       const data = await res.json()
       if (!data.found) {
-        // New week — clear old state so we start fresh
-        setEvents([])
+        // New week — clear metadata but keep calendar events
         setDinner(WEEK_LABELS.map((_, i) => ({ dayIdx: i, meal: '', cook: '' })))
         setAgenda([])
         setIsReady(false)
         return
       }
       const saved = data.state
-      if (saved.events?.length)        setEvents(saved.events)
+
+      if (calendarEvents !== undefined) {
+        // Called after a calendar sync — merge saved assignments INTO
+        // the fresh calendar events. Never restore deleted events.
+        const savedEvts = saved.events ?? []
+        setEvents(fresh => {
+          return fresh.map(evt => {
+            const savedEvt = savedEvts.find((s: any) => s.id === evt.id) ??
+                             savedEvts.find((s: any) => s.title === evt.title && s.dayIdx === evt.dayIdx)
+            if (!savedEvt) return evt
+            return {
+              ...evt,
+              involvedIds:     savedEvt.involvedIds ?? evt.involvedIds,
+              transportStatus: savedEvt.transportStatus ?? evt.transportStatus,
+              driverId:        savedEvt.driverId ?? evt.driverId,
+              carpoolNote:     savedEvt.carpoolNote ?? evt.carpoolNote,
+            }
+          })
+        })
+      } else {
+        // Called on page load (no fresh calendar) — restore everything
+        if (saved.events?.length) setEvents(saved.events)
+      }
+
       if (saved.dinner)                setDinner(saved.dinner)
       if (saved.agenda)                setAgenda(saved.agenda)
       if (saved.deadline)              setDeadline(saved.deadline)
@@ -729,7 +755,7 @@ export default function AdminSetupClient() {
       setSaveStatus('saved')
       setTimeout(() => setSaveStatus('idle'), 2000)
     } catch {
-      // No saved state yet — that's fine
+      // No saved state yet — fine
     }
   }, [])
 
@@ -742,47 +768,67 @@ export default function AdminSetupClient() {
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
       const data = await res.json()
 
-      // Merge incoming events with existing assignments
-      // so that transport/driver/people data is preserved on re-sync
-      // School events (school_drop_N, school_pickup_N) are generated locally
-      // and not in Google Calendar — preserve them separately
+      const incoming = data.events as CalendarEvent[]
+      const weekStartStr = data.weekStart as string
+
+      // Fetch saved admin state for this week
+      let savedState: any = null
+      try {
+        const stateRes = await fetch(`/api/admin-state?weekStart=${weekStartStr}`)
+        const stateData = await stateRes.json()
+        if (stateData.found) savedState = stateData.state
+      } catch { /* no saved state */ }
+
+      const savedEvts: any[] = savedState?.events ?? []
+
+      // Single setEvents call — do everything at once
       setEvents(prev => {
-        const incoming = data.events as CalendarEvent[]
+        // Preserve school events (locally generated, not in Google Calendar)
         const schoolEvents = prev.filter(e => e.id?.startsWith('school_'))
 
+        // For each incoming calendar event, apply any saved admin assignments
         const merged = incoming.map(evt => {
-          // Find a matching existing event by id or by title+dayIdx
-          const existing = prev.find(e => e.id === evt.id) ??
-                           prev.find(e => e.title === evt.title && e.dayIdx === evt.dayIdx)
+          const saved = savedEvts.find((s: any) => s.id === evt.id) ??
+                        savedEvts.find((s: any) => s.title === evt.title && s.dayIdx === evt.dayIdx)
 
-          if (existing && (
-            existing.involvedIds.length > 0 ||
-            existing.transportStatus !== 'unset' ||
-            existing.driverId
+          if (saved && (
+            saved.involvedIds?.length > 0 ||
+            saved.transportStatus !== 'unset' ||
+            saved.driverId
           )) {
-            // Preserve admin-set fields, update time/location from calendar
             return {
-              ...existing,
-              id:       evt.id,
-              time:     evt.time,
-              sortMin:  evt.sortMin,
-              location: evt.location,
-              allDay:   evt.allDay,
+              ...evt, // fresh from calendar (correct id, time, location)
+              involvedIds:     saved.involvedIds     ?? evt.involvedIds,
+              transportStatus: saved.transportStatus ?? evt.transportStatus,
+              driverId:        saved.driverId        ?? evt.driverId,
+              carpoolNote:     saved.carpoolNote     ?? evt.carpoolNote,
             }
           }
-
           return evt
         })
 
-        // Re-add school events (they live outside Google Calendar)
         return [...merged, ...schoolEvents]
       })
 
-      setLastSynced(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+      // Restore metadata from saved state (dinner, agenda, etc)
+      if (savedState) {
+        if (savedState.dinner)                setDinner(savedState.dinner)
+        if (savedState.agenda)                setAgenda(savedState.agenda)
+        if (savedState.deadline)              setDeadline(savedState.deadline)
+        if (savedState.deadlineDay)           setDeadlineDay(savedState.deadlineDay)
+        if (savedState.isReady !== undefined) setIsReady(savedState.isReady)
+      } else {
+        // New week — reset metadata
+        setDinner(WEEK_LABELS.map((_, i) => ({ dayIdx: i, meal: '', cook: '' })))
+        setAgenda([])
+        setIsReady(false)
+      }
 
-      // Build week date display strings from weekStart
+      setLastSynced(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+      setWeekStartKey(weekStartStr)
+
       if (data.weekStart) {
-        const start = new Date(data.weekStart + 'T00:00:00')
+        const start = new Date(weekStartStr + 'T00:00:00')
         const dates = WEEK_LABELS.map((_, i) => {
           const d = new Date(start)
           d.setDate(d.getDate() + i)
@@ -791,18 +837,14 @@ export default function AdminSetupClient() {
         setWeekDates(dates)
         const offsetLabel = offset === 0 ? 'This Week' : offset === 1 ? 'Next Week' : `In ${offset} Weeks`
         setWeekLabel(`${offsetLabel} · ${dates[0]}`)
-
-        // Set the week key and try to load saved state
-        const weekStartStr = data.weekStart as string
-        setWeekStartKey(weekStartStr)
-        await loadState(weekStartStr)
       }
+
     } catch (err) {
       setSyncError(err instanceof Error ? err.message : 'Sync failed')
     } finally {
       setSyncing(false)
     }
-  }, [weekOffset, loadState])
+  }, [weekOffset])
 
   // ─── Event handlers ─────────────────────────────────────────
   const setTransportStatus = (id: string, status: CalendarEvent['transportStatus']) =>
