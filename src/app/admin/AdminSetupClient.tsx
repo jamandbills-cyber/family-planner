@@ -744,22 +744,23 @@ export default function AdminSetupClient() {
 
       // Merge incoming events with existing assignments
       // so that transport/driver/people data is preserved on re-sync
+      // School events (school_drop_N, school_pickup_N) are generated locally
+      // and not in Google Calendar — preserve them separately
       setEvents(prev => {
         const incoming = data.events as CalendarEvent[]
-        return incoming.map(evt => {
+        const schoolEvents = prev.filter(e => e.id?.startsWith('school_'))
+
+        const merged = incoming.map(evt => {
           // Find a matching existing event by id or by title+dayIdx
           const existing = prev.find(e => e.id === evt.id) ??
                            prev.find(e => e.title === evt.title && e.dayIdx === evt.dayIdx)
-
-          // Apply standing rules if no existing assignment
-          const matchingRule = null
 
           if (existing && (
             existing.involvedIds.length > 0 ||
             existing.transportStatus !== 'unset' ||
             existing.driverId
           )) {
-            // Preserve all admin-set fields, just update time/location from calendar
+            // Preserve admin-set fields, update time/location from calendar
             return {
               ...existing,
               id:       evt.id,
@@ -770,18 +771,11 @@ export default function AdminSetupClient() {
             }
           }
 
-          // New event — apply standing rule if applicable
-          if (matchingRule) {
-            return {
-              ...evt,
-              transportStatus: 'needs_driver' as const,
-              driverId:        matchingRule.driverId,
-              standingRuleId:  matchingRule.id,
-            }
-          }
-
           return evt
         })
+
+        // Re-add school events (they live outside Google Calendar)
+        return [...merged, ...schoolEvents]
       })
 
       setLastSynced(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
