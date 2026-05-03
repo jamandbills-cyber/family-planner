@@ -22,7 +22,7 @@ const DAY_LABELS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const NEUTRAL_LIGHT = '#888780'
 const NEUTRAL_DARK  = '#3A3A4A'
-const SCHOOL_BG_LIGHT = '#FEF9C3'
+const SCHOOL_BG_LIGHT = '#FEF3C7'
 const SCHOOL_BG_DARK  = '#3A3614'
 const SCHOOL_FG_LIGHT = '#713F12'
 const SCHOOL_FG_DARK  = '#FEF3C7'
@@ -35,12 +35,10 @@ function pickEventColor(event: DashboardCalendarEvent,
     return { bg: isDark ? SCHOOL_BG_DARK : SCHOOL_BG_LIGHT,
              fg: isDark ? SCHOOL_FG_DARK : SCHOOL_FG_LIGHT }
   }
-  // Color by first involved member if any
   if (event.involvedIds && event.involvedIds.length > 0) {
     const first = members.find(m => event.involvedIds!.includes(m.id) && m.color)
     if (first?.color) return { bg: first.color, fg: '#fff' }
   }
-  // Fallback: name match against title
   const titleLower = event.title.toLowerCase()
   for (const m of members) {
     if (!m.color) continue
@@ -67,12 +65,11 @@ function computeTimeRange(events: DashboardCalendarEvent[]): { startHour: number
 }
 
 function densityScale(density: Density) {
-  if (density === 'tv')         return { hourPx: 56, hourLabelSize: 16, dayLabelSize: 14, dayNumSize: 36, eventTitleSize: 17, eventLocSize: 13, allDayBlockSize: 14, headerH: 76, allDayMin: 44, leftColW: 64, chipSize: 22, chipFontSize: 11, chipGap: 4 }
-  if (density === 'comfortable') return { hourPx: 36, hourLabelSize: 11, dayLabelSize: 11, dayNumSize: 18, eventTitleSize: 11, eventLocSize: 10, allDayBlockSize: 11, headerH: 50, allDayMin: 30, leftColW: 48, chipSize: 16, chipFontSize: 9, chipGap: 2 }
-  return { hourPx: 26, hourLabelSize: 10, dayLabelSize: 10, dayNumSize: 14, eventTitleSize: 10, eventLocSize: 9, allDayBlockSize: 10, headerH: 40, allDayMin: 24, leftColW: 40, chipSize: 14, chipFontSize: 8, chipGap: 2 }
+  if (density === 'tv')         return { hourPx: 64, hourLabelSize: 16, dayLabelSize: 14, dayNumSize: 36, eventTitleSize: 17, eventLocSize: 13, allDayBlockSize: 14, allDayMin: 44, leftColW: 64, chipSize: 24, chipFontSize: 12, chipGap: 4 }
+  if (density === 'comfortable') return { hourPx: 40, hourLabelSize: 11, dayLabelSize: 11, dayNumSize: 18, eventTitleSize: 12, eventLocSize: 10, allDayBlockSize: 11, allDayMin: 30, leftColW: 48, chipSize: 18, chipFontSize: 10, chipGap: 3 }
+  return { hourPx: 28, hourLabelSize: 10, dayLabelSize: 10, dayNumSize: 14, eventTitleSize: 10, eventLocSize: 9, allDayBlockSize: 10, allDayMin: 24, leftColW: 40, chipSize: 14, chipFontSize: 8, chipGap: 2 }
 }
 
-// Render colored initial chips for involved family members
 function ChipRow({ involvedIds, members, chipSize, chipFontSize, chipGap }: {
   involvedIds: string[]; members: FamilyMemberColor[];
   chipSize: number; chipFontSize: number; chipGap: number;
@@ -131,13 +128,11 @@ export default function WeekCalendar({
   const isDark = darkMode !== undefined ? darkMode : (now.getHours() >= 19 || now.getHours() < 7)
 
   const theme = isDark ? {
-    bg: '#15151F', card: '#1E1E2E', border: '#2A2A3A',
-    text: '#F0EDE7', subtext: '#8B8599',
+    card: '#1E1E2E', border: '#2A2A3A', text: '#F0EDE7', subtext: '#8B8599',
     todayBg: '#22222F', todayAccent: '#FFB088',
     gridline: '#2A2A3A', nowLine: '#F87171',
   } : {
-    bg: '#fff', card: '#fff', border: '#E2DDD6',
-    text: '#1A1A2E', subtext: '#8B8599',
+    card: '#fff', border: '#E2DDD6', text: '#1A1A2E', subtext: '#8B8599',
     todayBg: '#FFFAF5', todayAccent: '#C4522A',
     gridline: '#F4F1EB', nowLine: '#DC2626',
   }
@@ -263,8 +258,8 @@ export default function WeekCalendar({
                       fontSize: s.allDayBlockSize, fontWeight: 500,
                       padding: density === 'tv' ? '4px 10px' : '1px 6px',
                       borderRadius: 4,
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                       lineHeight: 1.4,
+                      wordBreak: 'break-word',
                     }}>
                       {e.title}
                     </div>
@@ -276,7 +271,7 @@ export default function WeekCalendar({
         </div>
       )}
 
-      {/* Time grid */}
+      {/* Time grid - blocks are absolutely positioned but grow tall to fit content */}
       <div style={{ position: 'relative', display: 'grid',
                     gridTemplateColumns: `${TIME_COL_W}px repeat(7, 1fr)`,
                     height: hours * ROW_HEIGHT }}>
@@ -313,44 +308,56 @@ export default function WeekCalendar({
               {dayEvts.map(e => {
                 const c = pickEventColor(e, members, isDark)
                 const top = ((e.startMinutes - startHour * 60) / 60) * ROW_HEIGHT
-                const height = Math.max(ROW_HEIGHT * 0.7,
-                  ((e.endMinutes - e.startMinutes) / 60) * ROW_HEIGHT)
+                const durationMinutes = e.endMinutes - e.startMinutes
+                const naturalHeight = (durationMinutes / 60) * ROW_HEIGHT
+                // Minimum height to fit the title + chips comfortably
+                const minHeight = density === 'tv' ? 70 : density === 'comfortable' ? 48 : 32
+                const height = Math.max(minHeight, naturalHeight)
                 const driverName = driverNameOf(e.driverId)
                 const needsDriver = e.transportStatus === 'needs_driver' && !e.driverId
-                const showChips = (e.involvedIds && e.involvedIds.length > 0) && height > ROW_HEIGHT * 0.85
 
                 return (
                   <div key={e.id}
                     title={`${e.title}${e.location ? ' · ' + e.location : ''}${driverName ? ' · driver: ' + driverName : ''}`}
                     style={{
                       position: 'absolute', top, left: 3, right: 3,
-                      height, background: c.bg, color: c.fg,
+                      minHeight: height, background: c.bg, color: c.fg,
                       borderRadius: 5,
-                      padding: density === 'tv' ? '6px 10px' : '3px 6px',
-                      fontSize: s.eventTitleSize, lineHeight: 1.25,
-                      overflow: 'hidden',
+                      padding: density === 'tv' ? '8px 12px' : '4px 7px',
+                      fontSize: s.eventTitleSize, lineHeight: 1.3,
                       boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
                       borderLeft: needsDriver ? `4px solid ${theme.nowLine}` : undefined,
+                      display: 'flex', flexDirection: 'column', gap: 2,
+                      zIndex: 1,
                     }}>
-                    <div style={{ fontWeight: 600, whiteSpace: 'nowrap',
-                                  overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{
+                      fontWeight: 600,
+                      wordBreak: 'break-word',
+                      whiteSpace: 'normal',
+                    }}>
                       {e.title}
                     </div>
-                    {height > ROW_HEIGHT * 1.1 && driverName && (
+                    {e.location && (
+                      <div style={{ fontSize: s.eventLocSize, opacity: 0.85,
+                                    wordBreak: 'break-word' }}>
+                        {e.location}
+                      </div>
+                    )}
+                    {driverName && (
                       <div style={{ fontSize: s.eventLocSize, opacity: 0.95,
-                                    fontWeight: 500, marginTop: 2 }}>
+                                    fontWeight: 500 }}>
                         🚗 {driverName}
                       </div>
                     )}
-                    {height > ROW_HEIGHT * 1.1 && needsDriver && (
+                    {needsDriver && (
                       <div style={{ fontSize: s.eventLocSize, opacity: 0.95,
-                                    fontWeight: 500, marginTop: 2 }}>
+                                    fontWeight: 600 }}>
                         ⚠ needs driver
                       </div>
                     )}
-                    {showChips && (
+                    {e.involvedIds && e.involvedIds.length > 0 && (
                       <ChipRow
-                        involvedIds={e.involvedIds!}
+                        involvedIds={e.involvedIds}
                         members={members}
                         chipSize={s.chipSize}
                         chipFontSize={s.chipFontSize}
@@ -390,7 +397,7 @@ function NowLine({ dayIdx, top, timeColWidth, color }: {
   return (
     <div style={{
       position: 'absolute', top, left: timeColWidth, right: 0,
-      height: 0, pointerEvents: 'none',
+      height: 0, pointerEvents: 'none', zIndex: 2,
     }}>
       <div style={{
         position: 'absolute', top: -1.5,
