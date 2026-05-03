@@ -9,9 +9,9 @@ export type DashboardData = {
   projects: (Project & { tasks: Task[] })[]
   ideas: Idea[]
   calendar: WeekRange | null
+  members: { id: string; display_name: string; color: string | null }[]
 }
 
-// Fetch calendar; never let calendar errors break the dashboard.
 async function safeFetchCalendar(): Promise<WeekRange | null> {
   try {
     return await fetchWeekCalendar(0)
@@ -66,6 +66,11 @@ export async function getDashboardForMember(memberId: string): Promise<Dashboard
     .eq('owner_id', memberId)
     .order('created_at', { ascending: false })
 
+  // Need full member roster for color-coding events
+  const { data: members } = await supabase
+    .from('family_members')
+    .select('id, display_name, color')
+
   const calendar = await safeFetchCalendar()
 
   return {
@@ -73,6 +78,7 @@ export async function getDashboardForMember(memberId: string): Promise<Dashboard
     projects: projectsWithTasks,
     ideas: ideas ?? [],
     calendar,
+    members: members ?? [],
   }
 }
 
@@ -115,5 +121,9 @@ export async function getKitchenData() {
 
   const calendar = await safeFetchCalendar()
 
-  return { columns, calendar }
+  return {
+    columns,
+    calendar,
+    members: members.map(m => ({ id: m.id, display_name: m.display_name, color: m.color })),
+  }
 }
