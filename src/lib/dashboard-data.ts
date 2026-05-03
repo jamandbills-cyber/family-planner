@@ -1,15 +1,26 @@
 import 'server-only'
 import { getSupabaseAdmin } from './supabase'
+import { fetchWeekCalendar } from './dashboard-calendar'
 import type { FamilyMember, Project, Task, Idea } from './types/dashboard'
+import type { WeekRange } from './types/calendar'
 
 export type DashboardData = {
   member: FamilyMember
   projects: (Project & { tasks: Task[] })[]
   ideas: Idea[]
+  calendar: WeekRange | null
 }
 
-// Build dashboard data for one family member.
-// Used by both logged-in /dashboard and tokenized /d/[token] routes.
+// Fetch calendar; never let calendar errors break the dashboard.
+async function safeFetchCalendar(): Promise<WeekRange | null> {
+  try {
+    return await fetchWeekCalendar(0)
+  } catch (err: any) {
+    console.error('Calendar fetch failed:', err?.message ?? err)
+    return null
+  }
+}
+
 export async function getDashboardForMember(memberId: string): Promise<DashboardData | null> {
   const supabase = getSupabaseAdmin()
 
@@ -18,10 +29,8 @@ export async function getDashboardForMember(memberId: string): Promise<Dashboard
     .select('*')
     .eq('id', memberId)
     .single()
-
   if (!member) return null
 
-  // Their own projects + all shared projects
   const { data: projects } = await supabase
     .from('projects')
     .select('*')
@@ -42,14 +51,11 @@ export async function getDashboardForMember(memberId: string): Promise<Dashboard
         .order('created_at', { ascending: false })
     : { data: [] }
 
-  // Group tasks by project. For shared projects, only show this member's tasks.
   const projectsWithTasks = (projects ?? []).map(p => ({
     ...p,
     tasks: (tasks ?? []).filter(t => {
       if (t.project_id !== p.id) return false
-      // For private projects, all tasks are mine
       if (!p.is_shared) return true
-      // For shared projects, only show tasks owned by this member
       return t.owner_id === memberId
     }),
   }))
@@ -60,14 +66,16 @@ export async function getDashboardForMember(memberId: string): Promise<Dashboard
     .eq('owner_id', memberId)
     .order('created_at', { ascending: false })
 
+  const calendar = await safeFetchCalendar()
+
   return {
     member,
     projects: projectsWithTasks,
     ideas: ideas ?? [],
+    calendar,
   }
 }
 
-// Build kitchen view: every member with their open task count and ideas
 export async function getKitchenData() {
   const supabase = getSupabaseAdmin()
 
@@ -76,7 +84,6 @@ export async function getKitchenData() {
     .select('*')
     .order('type', { ascending: false })
     .order('display_name')
-
   if (!members) return null
 
   const { data: allTasks } = await supabase
@@ -106,5 +113,7 @@ export async function getKitchenData() {
     ideas: (allIdeas ?? []).filter(i => i.owner_id === m.id),
   }))
 
-  return { columns }
+  const calendar = await safeFetchCalendar()
+
+  return { columns, calendar }
 }

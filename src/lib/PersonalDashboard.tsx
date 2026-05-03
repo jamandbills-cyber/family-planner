@@ -1,14 +1,17 @@
 'use client'
 
 import type { FamilyMember, Project, Task, Idea } from '@/lib/types/dashboard'
+import type { WeekRange } from '@/lib/types/calendar'
+import WeekCalendar from '@/lib/WeekCalendar'
 
 type Props = {
   member: FamilyMember
   projects: (Project & { tasks: Task[] })[]
   ideas: Idea[]
+  calendar: WeekRange | null
 }
 
-export default function PersonalDashboard({ member, projects, ideas }: Props) {
+export default function PersonalDashboard({ member, projects, ideas, calendar }: Props) {
   const now = new Date()
   const dateLabel = now.toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
@@ -39,17 +42,30 @@ export default function PersonalDashboard({ member, projects, ideas }: Props) {
         </span>
       </div>
 
-      {/* Calendar placeholder — Phase 3.1 will hook this to /api/calendar */}
-      <div style={{
-        background: '#fff', border: '0.5px solid #E2DDD6', borderRadius: 12,
-        padding: '14px 16px', marginBottom: 14,
-      }}>
-        <div style={{ fontSize: 12, color: '#8B8599', fontWeight: 500, marginBottom: 8 }}>
-          This week
-        </div>
-        <div style={{ fontSize: 13, color: '#8B8599', fontStyle: 'italic' }}>
-          Calendar grid coming next — pulling from family Google Calendar
-        </div>
+      {/* Calendar */}
+      <div style={{ marginBottom: 14 }}>
+        {calendar ? (
+          <WeekCalendar
+            events={calendar.events}
+            syncedAt={calendar.syncedAt}
+            weekStart={calendar.weekStart}
+            density="comfortable"
+            poll={true}
+          />
+        ) : (
+          <div style={{
+            background: '#fff', border: '0.5px solid #E2DDD6', borderRadius: 12,
+            padding: '14px 16px',
+          }}>
+            <div style={{ fontSize: 12, color: '#8B8599', fontWeight: 500, marginBottom: 8 }}>
+              This week
+            </div>
+            <div style={{ fontSize: 13, color: '#DC2626', fontStyle: 'italic' }}>
+              Calendar unavailable. Check that the family calendar is shared with the
+              service account, and Google Calendar API is enabled.
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Projects */}

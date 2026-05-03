@@ -1,6 +1,8 @@
 'use client'
 
 import type { FamilyMember } from '@/lib/types/dashboard'
+import type { WeekRange } from '@/lib/types/calendar'
+import WeekCalendar from '@/lib/WeekCalendar'
 
 type KitchenColumn = {
   member: FamilyMember
@@ -10,9 +12,10 @@ type KitchenColumn = {
 
 type Props = {
   columns: KitchenColumn[]
+  calendar: WeekRange | null
 }
 
-export default function KitchenDashboard({ columns }: Props) {
+export default function KitchenDashboard({ columns, calendar }: Props) {
   const now = new Date()
   const dateLabel = now.toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
@@ -29,23 +32,30 @@ export default function KitchenDashboard({ columns }: Props) {
       padding: '16px 20px',
       color: '#1A1A2E',
       display: 'grid',
-      gridTemplateColumns: '1fr 160px',
+      gridTemplateColumns: '1fr 200px',
       gap: 14,
     }}>
       {/* Main area */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
-        {/* Calendar placeholder */}
-        <div style={{
-          background: '#fff', border: '0.5px solid #E2DDD6', borderRadius: 10,
-          padding: '12px 14px',
-        }}>
-          <div style={{ fontSize: 12, color: '#8B8599', fontWeight: 500, marginBottom: 8 }}>
-            This week
+        {/* Calendar */}
+        {calendar ? (
+          <WeekCalendar
+            events={calendar.events}
+            syncedAt={calendar.syncedAt}
+            weekStart={calendar.weekStart}
+            density="compact"
+            poll={true}
+          />
+        ) : (
+          <div style={{
+            background: '#fff', border: '0.5px solid #E2DDD6', borderRadius: 10,
+            padding: '12px 14px',
+          }}>
+            <div style={{ fontSize: 12, color: '#DC2626', fontStyle: 'italic' }}>
+              Calendar unavailable
+            </div>
           </div>
-          <div style={{ fontSize: 13, color: '#8B8599', fontStyle: 'italic' }}>
-            Calendar grid coming next
-          </div>
-        </div>
+        )}
 
         {/* Person columns */}
         <div style={{
@@ -91,11 +101,13 @@ export default function KitchenDashboard({ columns }: Props) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{
           background: '#fff', border: '0.5px solid #E2DDD6', borderRadius: 8,
-          padding: '10px 12px', textAlign: 'center',
+          padding: '12px 14px', textAlign: 'center',
         }}>
-          <div style={{ fontSize: 12, fontWeight: 500 }}>{dateLabel.split(',')[0]}</div>
-          <div style={{ fontSize: 18, fontWeight: 500, lineHeight: 1.1 }}>{timeLabel}</div>
-          <div style={{ fontSize: 10, color: '#8B8599', marginTop: 2 }}>
+          <div style={{ fontSize: 13, fontWeight: 500 }}>{dateLabel.split(',')[0]}</div>
+          <div style={{ fontSize: 22, fontWeight: 500, lineHeight: 1.1, marginTop: 2 }}>
+            {timeLabel}
+          </div>
+          <div style={{ fontSize: 11, color: '#8B8599', marginTop: 4 }}>
             {dateLabel.split(',').slice(1).join(',').trim()}
           </div>
         </div>
@@ -109,14 +121,14 @@ export default function KitchenDashboard({ columns }: Props) {
         </div>
         <div style={{
           background: '#fff', border: '0.5px solid #E2DDD6', borderRadius: 8,
-          padding: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+          padding: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
         }}>
           <div style={{
-            width: 80, height: 80,
+            width: 100, height: 100,
             background: 'repeating-conic-gradient(#1A1A2E 0% 25%, transparent 0% 50%)',
             backgroundSize: '8px 8px', borderRadius: 4,
           }} />
-          <div style={{ fontSize: 9, color: '#8B8599' }}>scan to add</div>
+          <div style={{ fontSize: 10, color: '#8B8599', marginTop: 4 }}>scan to add</div>
         </div>
       </div>
     </div>
