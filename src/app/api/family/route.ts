@@ -1,19 +1,30 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { getFamilyMembers } from '@/lib/sheets'
+import { getSupabaseAdmin } from '@/lib/supabase'
 
+// Returns family roster in the existing shape so the existing admin/forms
+// flow keeps working unchanged. Reads from Supabase instead of the sheet.
 export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session?.accessToken) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const supabase = getSupabaseAdmin()
+  const { data, error } = await supabase
+    .from('family_members')
+    .select('id, username, email, display_name, type, role, phone, color, can_drive, ics_feeds')
+    .order('type', { ascending: false }) // adults first
+    .order('display_name')
+
+  if (error) {
+    console.error('Family fetch error:', error)
+    return NextResponse.json({ error: 'Failed to load family' }, { status: 500 })
   }
 
-  try {
-    const members = await getFamilyMembers(session.accessToken)
-    return NextResponse.json({ members })
-  } catch (err) {
-    console.error('Family fetch error:', err)
-    return NextResponse.json({ error: 'Failed to fetch family members' }, { status: 500 })
-  }
+  const members = (data ?? []).map(m => ({
+    id: m.id,
+    name: m.display_name,
+    type: m.type,
+    phone: m.phone ?? '',
+    email: m.email,
+    color: m.color ?? '',
+    canDrive: m.can_drive,
+  }))
+
+  return NextResponse.json({ members })
 }
