@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getWeekRange } from '@/lib/google-calendar'
 import { google } from 'googleapis'
 import { format } from 'date-fns'
+import { getSundayPlan } from '@/lib/sunday-plan'
 
 const SHEETS_ID = process.env.GOOGLE_SHEETS_ID!
 
@@ -32,7 +33,7 @@ export async function GET(
   const { token } = await params
 
   try {
-    // 1. Validate token
+    // 1. Validate token (Tokens tab still in sheet)
     const tokenRows = await readSheet('Tokens!A2:E500')
     const tokenRow  = tokenRows.find(r => r[0] === token)
     if (!tokenRow || tokenRow[3] !== 'kid') {
@@ -41,7 +42,7 @@ export async function GET(
     const memberId  = tokenRow[1]
     const weekStart = tokenRow[2]
 
-    // 2. Get family member
+    // 2. Get family member (Family tab still in sheet)
     const familyRows = await readSheet('Family!A2:F100')
     const memberRow  = familyRows.find(r => r[0] === memberId)
     if (!memberRow) {
@@ -54,20 +55,9 @@ export async function GET(
       .filter(r => r[0])
       .map(r => ({ id: r[0], name: r[1] }))
 
-    // 4. Load admin state
-    let adminEvents: any[] = []
-    try {
-      const stateRows = await readSheet('AdminState!A2:C200')
-      const stateRow = stateRows
-        .filter(r => r[0] === weekStart)
-        .sort((a, b) => b[1].localeCompare(a[1]))[0]
-      if (stateRow?.[2]) {
-        const state = JSON.parse(stateRow[2])
-        adminEvents = state.events ?? []
-      }
-    } catch (err) {
-      console.warn('Could not load admin state:', err)
-    }
+    // 4. Load admin state from Supabase
+    const planState = await getSundayPlan(weekStart)
+    const adminEvents: any[] = planState?.events ?? []
 
     const range     = getWeekRange(new Date(weekStart + 'T00:00:00'))
     const weekLabel = `Week of ${format(range.weekStart, 'MMM d')} – ${format(range.weekEnd, 'MMM d, yyyy')}`
@@ -83,7 +73,7 @@ export async function GET(
         time:    e.time,
         sortMin: e.sortMin ?? 0,
         isYours: (e.involvedIds ?? []).includes(member.id),
-        driver:  allMembers.find(m => m.id === e.driverId)?.name ?? null,
+        driver:  allMembers.find(m => m.id === e.driverId)?.name ?? '',
       })
     }
 

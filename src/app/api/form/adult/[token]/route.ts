@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getWeekRange } from '@/lib/google-calendar'
 import { google } from 'googleapis'
 import { format } from 'date-fns'
+import { getSundayPlan } from '@/lib/sunday-plan'
 
 const SHEETS_ID = process.env.GOOGLE_SHEETS_ID!
-const WEEK_DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
 const DAY_MAP: Record<number, string> = { 1:'Monday', 2:'Tuesday', 3:'Wednesday', 4:'Thursday', 5:'Friday' }
 
 function getServiceClient() {
@@ -34,7 +34,7 @@ export async function GET(
   const { token } = await params
 
   try {
-    // 1. Validate token from Sheets
+    // 1. Validate token from Sheets (Tokens tab still in sheet)
     const tokenRows = await readSheet('Tokens!A2:E500')
     const tokenRow  = tokenRows.find(r => r[0] === token)
     if (!tokenRow || tokenRow[3] !== 'adult') {
@@ -43,7 +43,7 @@ export async function GET(
     const memberId  = tokenRow[1]
     const weekStart = tokenRow[2]
 
-    // 2. Get family member
+    // 2. Get family member (Family tab still in sheet for now)
     const familyRows = await readSheet('Family!A2:F100')
     const memberRow  = familyRows.find(r => r[0] === memberId)
     if (!memberRow) {
@@ -58,20 +58,9 @@ export async function GET(
       color: memberRow[5] ?? '#8B8599',
     }
 
-    // 3. Load admin state for this week
-    let adminEvents: any[] = []
-    try {
-      const stateRows = await readSheet('AdminState!A2:C200')
-      const stateRow = stateRows
-        .filter(r => r[0] === weekStart)
-        .sort((a, b) => b[1].localeCompare(a[1]))[0]
-      if (stateRow?.[2]) {
-        const state = JSON.parse(stateRow[2])
-        adminEvents = state.events ?? []
-      }
-    } catch (err) {
-      console.warn('Could not load admin state:', err)
-    }
+    // 3. Load admin state from Supabase
+    const planState = await getSundayPlan(weekStart)
+    const adminEvents: any[] = planState?.events ?? []
 
     const range     = getWeekRange(new Date(weekStart + 'T00:00:00'))
     const weekLabel = `Week of ${format(range.weekStart, 'MMM d')} – ${format(range.weekEnd, 'MMM d, yyyy')}`
@@ -89,20 +78,18 @@ export async function GET(
         location:        e.location ?? '',
         transportStatus: e.transportStatus ?? 'unset',
         driverId:        e.driverId ?? null,
-        // needsDriver = unassigned event that needs someone to volunteer
         needsDriver:     e.transportStatus === 'needs_driver' && !e.driverId && !e.id?.startsWith('school_'),
-        // amDriver = admin already assigned THIS person as driver
         amDriver:        e.transportStatus === 'needs_driver' && e.driverId === member.id && !e.id?.startsWith('school_'),
       })
     }
 
     // 5. School defaults for this adult
     const schoolDefaults: Record<string, { am: boolean; pm: boolean }> = {
-      Monday: { am: false, pm: false },
-      Tuesday: { am: false, pm: false },
+      Monday:    { am: false, pm: false },
+      Tuesday:   { am: false, pm: false },
       Wednesday: { am: false, pm: false },
-      Thursday: { am: false, pm: false },
-      Friday: { am: false, pm: false },
+      Thursday:  { am: false, pm: false },
+      Friday:    { am: false, pm: false },
     }
     for (const e of adminEvents) {
       if (!e.id?.startsWith('school_')) continue
