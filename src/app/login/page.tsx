@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 
 function LoginForm() {
   const router = useRouter()
-  const next = useSearchParams().get('next') ?? '/profile'
+  const next = useSearchParams().get('next') ?? '/dashboard'
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [mode, setMode] = useState<'password' | 'magic'>('password')
@@ -83,7 +83,7 @@ function LoginForm() {
                   Password
                 </label>
                 <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-                  autoComplete="current-password" required style={inputStyle} />
+                  autoComplete="current-password" required={mode === 'password'} style={inputStyle} />
               </>
             )}
 
