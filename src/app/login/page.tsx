@@ -104,6 +104,16 @@ function LoginForm() {
             </button>
           </form>
         )}
+
+        <hr style={{ border: 'none', borderTop: '1px solid #E8E3DB', margin: '24px 0 16px' }} />
+
+        <a href="/admin"
+          style={{ display: 'block', textAlign: 'center', color: '#8B8599', fontSize: 12,
+                   textDecoration: 'none', fontFamily: 'inherit' }}>
+          Looking for Sunday Planning? <span style={{ color: '#C4522A', fontWeight: 600 }}>
+            Sign in with Google →
+          </span>
+        </a>
       </div>
     </div>
   )

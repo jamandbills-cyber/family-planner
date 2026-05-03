@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getSupabaseServer } from '@/lib/supabase'
 import DevicesAdminClient from './DevicesAdminClient'
+import { AuthedLayout } from '@/lib/AuthedLayout'
 
 export default async function AdminDevicesPage() {
   const supabase = await getSupabaseServer()
@@ -12,9 +13,11 @@ export default async function AdminDevicesPage() {
 
   if (!me || me.role !== 'admin') {
     return (
-      <div style={{ padding: 40, fontFamily: "'DM Sans', sans-serif" }}>
-        Admins only.
-      </div>
+      <AuthedLayout>
+        <div style={{ padding: 40, fontFamily: "'DM Sans', sans-serif" }}>
+          Admins only.
+        </div>
+      </AuthedLayout>
     )
   }
 
@@ -24,7 +27,11 @@ export default async function AdminDevicesPage() {
   const { data: members } = await supabase.from('family_members')
     .select('id, display_name').order('display_name')
 
-  return <DevicesAdminClient
-    initialDevices={devices ?? []}
-    members={members ?? []} />
+  return (
+    <AuthedLayout>
+      <DevicesAdminClient
+        initialDevices={devices ?? []}
+        members={members ?? []} />
+    </AuthedLayout>
+  )
 }

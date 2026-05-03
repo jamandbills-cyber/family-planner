@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getSupabaseServer } from '@/lib/supabase'
 import ProjectsAdminClient from './ProjectsAdminClient'
+import { AuthedLayout } from '@/lib/AuthedLayout'
 
 export default async function AdminProjectsPage() {
   const supabase = await getSupabaseServer()
@@ -12,9 +13,11 @@ export default async function AdminProjectsPage() {
 
   if (!me || me.role !== 'admin') {
     return (
-      <div style={{ padding: 40, fontFamily: "'DM Sans', sans-serif" }}>
-        Admins only.
-      </div>
+      <AuthedLayout>
+        <div style={{ padding: 40, fontFamily: "'DM Sans', sans-serif" }}>
+          Admins only.
+        </div>
+      </AuthedLayout>
     )
   }
 
@@ -35,10 +38,12 @@ export default async function AdminProjectsPage() {
     : { data: [] }
 
   return (
-    <ProjectsAdminClient
-      initialProjects={projects ?? []}
-      initialTasks={tasks ?? []}
-      members={members ?? []}
-    />
+    <AuthedLayout>
+      <ProjectsAdminClient
+        initialProjects={projects ?? []}
+        initialTasks={tasks ?? []}
+        members={members ?? []}
+      />
+    </AuthedLayout>
   )
 }

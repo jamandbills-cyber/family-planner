@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getSupabaseServer } from '@/lib/supabase'
 import { getDashboardForMember } from '@/lib/dashboard-data'
 import PersonalDashboard from '@/lib/PersonalDashboard'
+import { AuthedLayout } from '@/lib/AuthedLayout'
 
 export default async function DashboardPage() {
   const supabase = await getSupabaseServer()
@@ -16,20 +17,28 @@ export default async function DashboardPage() {
 
   if (!me) {
     return (
-      <div style={{ padding: 40, fontFamily: "'DM Sans', sans-serif" }}>
-        No family member linked to this account. Ask an admin to add you to the roster.
-      </div>
+      <AuthedLayout>
+        <div style={{ padding: 40, fontFamily: "'DM Sans', sans-serif" }}>
+          No family member linked to this account. Ask an admin to add you to the roster.
+        </div>
+      </AuthedLayout>
     )
   }
 
   const data = await getDashboardForMember(me.id)
   if (!data) {
     return (
-      <div style={{ padding: 40, fontFamily: "'DM Sans', sans-serif" }}>
-        Could not load dashboard data.
-      </div>
+      <AuthedLayout>
+        <div style={{ padding: 40, fontFamily: "'DM Sans', sans-serif" }}>
+          Could not load dashboard data.
+        </div>
+      </AuthedLayout>
     )
   }
 
-  return <PersonalDashboard {...data} />
+  return (
+    <AuthedLayout>
+      <PersonalDashboard {...data} />
+    </AuthedLayout>
+  )
 }
