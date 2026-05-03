@@ -1,14 +1,11 @@
-import { createBrowserClient, createServerClient } from '@supabase/ssr'
+import 'server-only'
+
+import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 
 const url     = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-// Browser client — use in 'use client' components
-export function getSupabaseBrowser() {
-  return createBrowserClient(url, anonKey)
-}
 
 // Server client — use in server components & API routes
 // Reads/writes session cookies automatically

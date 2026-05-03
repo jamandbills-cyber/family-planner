@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { getSupabaseBrowser } from '@/lib/supabase'
+import { getSupabaseBrowser } from '@/lib/supabase-browser'
 import type { FamilyMember } from '@/lib/types/dashboard'
 
 export default function ProfileClient({ member }: { member: FamilyMember }) {
