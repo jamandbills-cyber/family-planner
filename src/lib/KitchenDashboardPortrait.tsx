@@ -33,8 +33,6 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
   const [photoVisible, setPhotoVisible]   = useState(true)
   const [vp, setVp] = useState({ w: 1920, h: 1080 })
 
-  // Track viewport. Display layout is always portrait dimensions
-  // (we swap w/h), then a 90° CSS rotation makes it fit the actual viewport.
   useEffect(() => {
     const update = () => setVp({ w: window.innerWidth, h: window.innerHeight })
     update()
@@ -209,8 +207,6 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
     )
   }
 
-  // The actual portrait dashboard, laid out at PORTRAIT dimensions (1080x1920).
-  // It does not know it's going to be rotated.
   const dashboard = (
     <div style={{
       width: '100%', height: '100%',
@@ -225,7 +221,6 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
       minHeight: 0,
       boxSizing: 'border-box',
     }}>
-      {/* CALENDAR */}
       <div style={{ minHeight: 0, display: 'flex' }}>
         {calendar ? (
           <WeekCalendar
@@ -257,7 +252,6 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
         {bottomRow.map(col => <FamilyCard key={col.member.id} col={col} />)}
       </div>
 
-      {/* INFO ROW */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: '1fr 2fr 1.2fr 1fr',
@@ -371,13 +365,7 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
     </div>
   )
 
-  // Outer rotation wrapper.
-  // Viewport is, e.g., 1920w x 1080h (landscape). We render the dashboard at
-  // 1080 (height of viewport) wide x 1920 (width of viewport) tall — i.e., we
-  // swap the dimensions — then rotate 90° CW so it fills the screen rotated.
-  // After rotation, the dashboard's "top" lines up with the right edge of the
-  // physical screen, which is what you want when the TV is mounted with its
-  // top edge facing the right.
+  // Render at swapped dimensions, then rotate 90° COUNTER-CLOCKWISE.
   const portraitW = vp.h
   const portraitH = vp.w
 
@@ -394,7 +382,7 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
         top: '50%', left: '50%',
         width: portraitW,
         height: portraitH,
-        transform: 'translate(-50%, -50%) rotate(90deg)',
+        transform: 'translate(-50%, -50%) rotate(-90deg)',
         transformOrigin: 'center center',
       }}>
         {dashboard}
