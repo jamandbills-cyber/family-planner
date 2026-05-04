@@ -5,8 +5,6 @@ import { getSundayPlan } from '@/lib/sunday-plan'
 const CRON_SECRET = process.env.CRON_SECRET!
 const APP_URL     = process.env.NEXTAUTH_URL ?? 'https://family-planner-tawny.vercel.app'
 
-// Vercel Cron hits this every Sunday at 8:00 AM (UTC 14:00).
-// No more Google access token needed — Sunday Plan state lives in Supabase.
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
   if (authHeader !== `Bearer ${CRON_SECRET}`) {
@@ -29,7 +27,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ skipped: true, reason: 'Not marked as ready' })
     }
 
-    // Trigger send-forms (this still needs the admin-token flow internally)
     const sendRes = await fetch(`${APP_URL}/api/send-forms`, {
       method: 'POST',
       headers: {

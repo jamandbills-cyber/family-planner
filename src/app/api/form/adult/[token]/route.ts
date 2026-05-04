@@ -34,7 +34,6 @@ export async function GET(
   const { token } = await params
 
   try {
-    // 1. Validate token from Sheets (Tokens tab still in sheet)
     const tokenRows = await readSheet('Tokens!A2:E500')
     const tokenRow  = tokenRows.find(r => r[0] === token)
     if (!tokenRow || tokenRow[3] !== 'adult') {
@@ -43,7 +42,6 @@ export async function GET(
     const memberId  = tokenRow[1]
     const weekStart = tokenRow[2]
 
-    // 2. Get family member (Family tab still in sheet for now)
     const familyRows = await readSheet('Family!A2:F100')
     const memberRow  = familyRows.find(r => r[0] === memberId)
     if (!memberRow) {
@@ -58,14 +56,13 @@ export async function GET(
       color: memberRow[5] ?? '#8B8599',
     }
 
-    // 3. Load admin state from Supabase
+    // Load admin state from Supabase
     const planState = await getSundayPlan(weekStart)
     const adminEvents: any[] = planState?.events ?? []
 
     const range     = getWeekRange(new Date(weekStart + 'T00:00:00'))
     const weekLabel = `Week of ${format(range.weekStart, 'MMM d')} – ${format(range.weekEnd, 'MMM d, yyyy')}`
 
-    // 4. Build events by day
     const eventsByDay: Record<number, any[]> = {}
     for (let i = 0; i < 7; i++) eventsByDay[i] = []
     for (const e of adminEvents) {
@@ -83,7 +80,6 @@ export async function GET(
       })
     }
 
-    // 5. School defaults for this adult
     const schoolDefaults: Record<string, { am: boolean; pm: boolean }> = {
       Monday:    { am: false, pm: false },
       Tuesday:   { am: false, pm: false },

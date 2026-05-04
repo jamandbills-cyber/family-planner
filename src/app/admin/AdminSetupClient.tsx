@@ -626,7 +626,7 @@ export default function AdminSetupClient() {
     events, dinner, agenda, deadline, deadlineDay, isReady, schoolConfig
   }), [events, dinner, agenda, deadline, deadlineDay, isReady, schoolConfig])
 
-  // ─── Save to Google Sheets (debounced 2s) ────────────────────
+  // ─── Save to Supabase (lightly debounced, 300ms) ─────────────
   const saveState = useCallback(async (weekStart: string, snapshot: object) => {
     if (!weekStart) return
     setSaveStatus('saving')
@@ -636,17 +636,19 @@ export default function AdminSetupClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ weekStart, state: snapshot }),
       })
-      if (!res.ok) throw new Error('Save failed')
+      if (!res.ok) throw new Error(`Save failed: ${res.status}`)
       setSaveStatus('saved')
       setTimeout(() => setSaveStatus('idle'), 3000)
-    } catch {
+    } catch (err) {
+      console.error('Save failed:', err)
+      // Don't auto-dismiss — leave the error visible until the next save attempt
       setSaveStatus('error')
     }
   }, [])
 
   const triggerSave = useCallback((weekStart: string, snapshot: object) => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => saveState(weekStart, snapshot), 2000)
+    saveTimer.current = setTimeout(() => saveState(weekStart, snapshot), 300)
   }, [saveState])
 
   // ─── Auto-save when key state changes ────────────────────────
@@ -655,109 +657,6 @@ export default function AdminSetupClient() {
       triggerSave(weekStartKey, getSnapshot())
     }
   }, [events, dinner, agenda, deadline, deadlineDay, isReady, schoolConfig])
-
-  // ─── Load saved state for a given weekStart ───────────────────
-  // IMPORTANT: When called after a calendar sync, we do NOT restore
-  // events from saved state — the calendar is the source of truth for
-  // which events exist. We only restore admin assignments by merging
-  // them into the already-set calendar events.
-  const loadState = useCallback(async (weekStart: string, calendarEvents?: CalendarEvent[]) => {
-    try {
-      const res = await fetch(`/api/admin-state?weekStart=${weekStart}`)
-      if (!res.ok) return
-      const data = await res.json()
-      if (!data.found) {
-        // New week — clear metadata but keep calendar events
-        setDinner(WEEK_LABELS.map((_, i) => ({ dayIdx: i, meal: '', cook: '' })))
-        setAgenda([])
-        setIsReady(false)
-        return
-      }
-      const saved = data.state
-
-      if (calendarEvents !== undefined) {
-        // Called after a calendar sync — merge saved assignments INTO
-        // the fresh calendar events. Never restore deleted events.
-        const savedEvts = saved.events ?? []
-        setEvents(fresh => {
-          return fresh.map(evt => {
-            const savedEvt = savedEvts.find((s: any) => s.id === evt.id) ??
-                             savedEvts.find((s: any) => s.title === evt.title && s.dayIdx === evt.dayIdx)
-            if (!savedEvt) return evt
-            return {
-              ...evt,
-              involvedIds:     savedEvt.involvedIds ?? evt.involvedIds,
-              transportStatus: savedEvt.transportStatus ?? evt.transportStatus,
-              driverId:        savedEvt.driverId ?? evt.driverId,
-              carpoolNote:     savedEvt.carpoolNote ?? evt.carpoolNote,
-            }
-          })
-        })
-      } else {
-        // Called on page load (no fresh calendar) — restore everything
-        if (saved.events?.length) setEvents(saved.events)
-      }
-
-      if (saved.dinner)                setDinner(saved.dinner)
-      if (saved.agenda)                setAgenda(saved.agenda)
-      if (saved.deadline)              setDeadline(saved.deadline)
-      if (saved.deadlineDay)           setDeadlineDay(saved.deadlineDay)
-      if (saved.isReady !== undefined) setIsReady(saved.isReady)
-      setSaveStatus('saved')
-      setTimeout(() => setSaveStatus('idle'), 2000)
-    } catch {
-      // No saved state yet — fine
-    }
-  }, [])
-
-  // ─── Build school events from config ─────────────────────────
-  const buildSchoolEvents = useCallback((config: typeof DEFAULT_SCHOOL) => {
-    const events: any[] = []
-    SCHOOL_DAYS.forEach(dayIdx => {
-      if (config.noSchool.includes(dayIdx)) return
-      const dropId    = `school_drop_${dayIdx}`
-      const pickupId  = `school_pickup_${dayIdx}`
-      if (!config.removedEvents.includes(dropId)) {
-        events.push({
-          id: dropId,
-          title: `School Drop-off (Boston, Hailee, Sadie)`,
-          dayIdx,
-          time: config.dropoffTime,
-          sortMin: parseTimeToMin(config.dropoffTime),
-          location: 'School',
-          allDay: false,
-          involvedIds: SCHOOL_KIDS,
-          transportStatus: 'needs_driver' as const,
-          driverId: config.dropoffDriverId || null,
-          standingRuleId: null,
-          carpoolNote: '',
-        })
-      }
-      if (!config.removedEvents.includes(pickupId)) {
-        events.push({
-          id: pickupId,
-          title: `School Pick-up (Boston, Hailee, Sadie)`,
-          dayIdx,
-          time: config.pickupTime,
-          sortMin: parseTimeToMin(config.pickupTime),
-          location: 'School',
-          allDay: false,
-          involvedIds: SCHOOL_KIDS,
-          transportStatus: 'needs_driver' as const,
-          driverId: config.pickupDriverId || null,
-          standingRuleId: null,
-          carpoolNote: '',
-        })
-      }
-    })
-    return events
-  }, [])
-
-  // ─── Remove a school event one-off ───────────────────────────
-  const removeSchoolEvent = (id: string) => {
-    setSchoolConfig(c => ({ ...c, removedEvents: [...c.removedEvents, id] }))
-    setEvents(evs => evs.filter(e => e.id !== id))
-  }
 
   // ─── Sync with Google Calendar ──────────────────────────────
   const handleSync = useCallback(async (offset: number = weekOffset) => {
@@ -787,13 +686,9 @@ export default function AdminSetupClient() {
       setSchoolConfig(savedConfig)
 
       // Single setEvents call — everything at once
-      // Calendar is source of truth for which events exist
-      // School events auto-generated from saved config
       setEvents(() => {
-        // Build school events from saved config
         const schoolEvts = buildSchoolEvents(savedConfig)
 
-        // For each incoming calendar event, apply any saved admin assignments
         const merged = incoming.map(evt => {
           const saved = savedEvts.find((s: any) => s.id === evt.id) ??
                         savedEvts.find((s: any) => s.title === evt.title && s.dayIdx === evt.dayIdx)
@@ -851,7 +746,84 @@ export default function AdminSetupClient() {
     } finally {
       setSyncing(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset])
+
+  // ─── Auto-load calendar on first mount ───────────────────────
+  // Fixes the "have to click Load Calendar every refresh" bug.
+  useEffect(() => {
+    handleSync(0)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ─── Save before leaving the page ────────────────────────────
+  // Catches the case where you make a change and refresh/close before
+  // the debounce timer fires. Uses sendBeacon which works during unload.
+  useEffect(() => {
+    const flush = () => {
+      if (!weekStartKey || events.length === 0) return
+      const blob = new Blob(
+        [JSON.stringify({ weekStart: weekStartKey, state: getSnapshot() })],
+        { type: 'application/json' }
+      )
+      navigator.sendBeacon('/api/admin-state', blob)
+    }
+    window.addEventListener('beforeunload', flush)
+    window.addEventListener('pagehide', flush)
+    return () => {
+      window.removeEventListener('beforeunload', flush)
+      window.removeEventListener('pagehide', flush)
+    }
+  }, [weekStartKey, events, dinner, agenda, deadline, deadlineDay, isReady, schoolConfig, getSnapshot])
+
+  // ─── Build school events from config ─────────────────────────
+  const buildSchoolEvents = useCallback((config: typeof DEFAULT_SCHOOL) => {
+    const events: any[] = []
+    SCHOOL_DAYS.forEach(dayIdx => {
+      if (config.noSchool.includes(dayIdx)) return
+      const dropId    = `school_drop_${dayIdx}`
+      const pickupId  = `school_pickup_${dayIdx}`
+      if (!config.removedEvents.includes(dropId)) {
+        events.push({
+          id: dropId,
+          title: `School Drop-off (Boston, Hailee, Sadie)`,
+          dayIdx,
+          time: config.dropoffTime,
+          sortMin: parseTimeToMin(config.dropoffTime),
+          location: 'School',
+          allDay: false,
+          involvedIds: SCHOOL_KIDS,
+          transportStatus: 'needs_driver' as const,
+          driverId: config.dropoffDriverId || null,
+          standingRuleId: null,
+          carpoolNote: '',
+        })
+      }
+      if (!config.removedEvents.includes(pickupId)) {
+        events.push({
+          id: pickupId,
+          title: `School Pick-up (Boston, Hailee, Sadie)`,
+          dayIdx,
+          time: config.pickupTime,
+          sortMin: parseTimeToMin(config.pickupTime),
+          location: 'School',
+          allDay: false,
+          involvedIds: SCHOOL_KIDS,
+          transportStatus: 'needs_driver' as const,
+          driverId: config.pickupDriverId || null,
+          standingRuleId: null,
+          carpoolNote: '',
+        })
+      }
+    })
+    return events
+  }, [])
+
+  // ─── Remove a school event one-off ───────────────────────────
+  const removeSchoolEvent = (id: string) => {
+    setSchoolConfig(c => ({ ...c, removedEvents: [...c.removedEvents, id] }))
+    setEvents(evs => evs.filter(e => e.id !== id))
+  }
 
   // ─── Event handlers ─────────────────────────────────────────
   const setTransportStatus = (id: string, status: CalendarEvent['transportStatus']) =>
@@ -916,7 +888,7 @@ export default function AdminSetupClient() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {saveStatus === 'saving' && <span style={{ fontSize: 12, color: '#7070A0' }}>Saving…</span>}
             {saveStatus === 'saved'  && <span style={{ fontSize: 12, color: '#4ADE80' }}>✓ Saved</span>}
-            {saveStatus === 'error'  && <span style={{ fontSize: 12, color: '#FCA5A5' }}>⚠ Save failed</span>}
+            {saveStatus === 'error'  && <span style={{ fontSize: 12, color: '#FCA5A5', background: 'rgba(239,68,68,0.15)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(239,68,68,0.3)' }}>⚠ Save failed — your changes may be lost</span>}
             {lastSynced && <span style={{ fontSize: 12, color: '#7070A0' }}>Synced: {lastSynced}</span>}
             {weekStartKey && (
               <span style={{ fontSize: 12, background: submissionCount === familyMembers.length && familyMembers.length > 0 ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.08)', color: submissionCount === familyMembers.length && familyMembers.length > 0 ? '#4ADE80' : 'rgba(255,255,255,0.6)', border: `1px solid ${submissionCount === familyMembers.length && familyMembers.length > 0 ? 'rgba(74,222,128,0.3)' : 'rgba(255,255,255,0.15)'}`, borderRadius: 8, padding: '5px 10px', fontWeight: 600 }}>
@@ -983,10 +955,10 @@ export default function AdminSetupClient() {
           <div style={{ ...s.card, padding: 40, textAlign: 'center' }}>
             <Calendar size={40} style={{ color: '#C4B8A8', margin: '0 auto 16px' }} />
             <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, fontWeight: 600, color: '#1A1A2E', marginBottom: 8 }}>
-              No events loaded yet
+              Loading calendar…
             </div>
             <p style={{ fontSize: 14, color: '#8B8599', marginBottom: 20 }}>
-              Click "Load Calendar" above to pull this week's events from your Google Calendar.
+              If this doesn't auto-load in a few seconds, click below.
             </p>
             <button style={{ ...s.btnPri }} onClick={() => handleSync(weekOffset)}>
               <RefreshCw size={14} /> Load Calendar

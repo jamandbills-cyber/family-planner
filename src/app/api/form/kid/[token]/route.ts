@@ -33,7 +33,6 @@ export async function GET(
   const { token } = await params
 
   try {
-    // 1. Validate token (Tokens tab still in sheet)
     const tokenRows = await readSheet('Tokens!A2:E500')
     const tokenRow  = tokenRows.find(r => r[0] === token)
     if (!tokenRow || tokenRow[3] !== 'kid') {
@@ -42,7 +41,6 @@ export async function GET(
     const memberId  = tokenRow[1]
     const weekStart = tokenRow[2]
 
-    // 2. Get family member (Family tab still in sheet)
     const familyRows = await readSheet('Family!A2:F100')
     const memberRow  = familyRows.find(r => r[0] === memberId)
     if (!memberRow) {
@@ -50,19 +48,16 @@ export async function GET(
     }
     const member = { id: memberRow[0], name: memberRow[1] }
 
-    // 3. Get all family names for driver display
     const allMembers = familyRows
       .filter(r => r[0])
       .map(r => ({ id: r[0], name: r[1] }))
 
-    // 4. Load admin state from Supabase
     const planState = await getSundayPlan(weekStart)
     const adminEvents: any[] = planState?.events ?? []
 
     const range     = getWeekRange(new Date(weekStart + 'T00:00:00'))
     const weekLabel = `Week of ${format(range.weekStart, 'MMM d')} – ${format(range.weekEnd, 'MMM d, yyyy')}`
 
-    // 5. Build events by day
     const eventsByDay: Record<number, any[]> = {}
     for (let i = 0; i < 7; i++) eventsByDay[i] = []
     for (const e of adminEvents) {
