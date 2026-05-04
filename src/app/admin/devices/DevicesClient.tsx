@@ -1,13 +1,16 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Plus, Trash2, Tv, User, Loader2, ExternalLink, Copy, Check } from 'lucide-react'
+import { Plus, Trash2, Tv, User, Loader2, ExternalLink, Copy, Check, Smartphone, Monitor } from 'lucide-react'
+
+type Orientation = 'landscape' | 'portrait'
 
 type Device = {
   id: string
   token: string
   label: string
   view_type: 'kitchen' | 'personal'
+  orientation: Orientation
   member_id: string | null
   created_at: string
 }
@@ -23,9 +26,16 @@ export default function DevicesClient() {
   const [showAdd, setShowAdd]   = useState(false)
   const [copied, setCopied]     = useState<string | null>(null)
 
-  const [newLabel, setNewLabel]     = useState('')
-  const [newType, setNewType]       = useState<'kitchen' | 'personal'>('kitchen')
-  const [newMember, setNewMember]   = useState('')
+  const [newLabel, setNewLabel]             = useState('')
+  const [newType, setNewType]               = useState<'kitchen' | 'personal'>('kitchen')
+  const [newOrient, setNewOrient]           = useState<Orientation>('landscape')
+  const [newMember, setNewMember]           = useState('')
+
+  const safeJson = async (res: Response) => {
+    const text = await res.text()
+    if (!text) return {}
+    try { return JSON.parse(text) } catch { return { error: text } }
+  }
 
   const load = async () => {
     setLoading(true)
@@ -35,12 +45,14 @@ export default function DevicesClient() {
         fetch('/api/admin/devices'),
         fetch('/api/admin/family'),
       ])
-      const dData = await dRes.json()
-      const mData = await mRes.json()
-      if (!dRes.ok) throw new Error(dData.error ?? 'Failed to load devices')
+      const dData = await safeJson(dRes)
+      const mData = await safeJson(mRes)
+      if (!dRes.ok) throw new Error(dData.error ?? `Devices: ${dRes.status}`)
+      if (!mRes.ok) console.warn('Family fetch failed:', mData.error)
       setDevices(dData.devices ?? [])
       setMembers((mData.members ?? []).map((m: any) => ({
-        id: m.id, display_name: m.display_name ?? m.name ?? m.id,
+        id: m.id,
+        display_name: m.display_name ?? m.name ?? m.id,
       })))
     } catch (e: any) {
       setError(e.message)
@@ -63,13 +75,14 @@ export default function DevicesClient() {
         body: JSON.stringify({
           label: newLabel.trim(),
           view_type: newType,
+          orientation: newOrient,
           member_id: newType === 'personal' ? newMember : null,
         }),
       })
-      const data = await res.json()
+      const data = await safeJson(res)
       if (!res.ok) throw new Error(data.error ?? 'Create failed')
       setDevices(d => [data.device, ...d])
-      setNewLabel(''); setNewMember(''); setShowAdd(false)
+      setNewLabel(''); setNewMember(''); setNewOrient('landscape'); setShowAdd(false)
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -82,10 +95,25 @@ export default function DevicesClient() {
     try {
       const res = await fetch(`/api/admin/devices/${id}`, { method: 'DELETE' })
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
+        const data = await safeJson(res)
         throw new Error(data.error ?? 'Delete failed')
       }
       setDevices(d => d.filter(x => x.id !== id))
+    } catch (e: any) {
+      alert(e.message)
+    }
+  }
+
+  const setOrientation = async (id: string, orientation: Orientation) => {
+    try {
+      const res = await fetch(`/api/admin/devices/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orientation }),
+      })
+      const data = await safeJson(res)
+      if (!res.ok) throw new Error(data.error ?? 'Update failed')
+      setDevices(ds => ds.map(d => d.id === id ? { ...d, orientation } : d))
     } catch (e: any) {
       alert(e.message)
     }
@@ -103,9 +131,7 @@ export default function DevicesClient() {
   return (
     <div style={{
       fontFamily: "'DM Sans', sans-serif",
-      background: '#F7F4EF',
-      minHeight: '100vh',
-      padding: 24,
+      background: '#F7F4EF', minHeight: '100vh', padding: 24,
     }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <div style={{ marginBottom: 24 }}>
@@ -114,7 +140,7 @@ export default function DevicesClient() {
             Devices
           </h1>
           <p style={{ fontSize: 14, color: '#8B8599', margin: 0 }}>
-            Each display gets its own URL and QR code. Open the URL on the Fire TV / Signage Stick.
+            Each display gets its own URL and QR code. Orientation can be changed any time.
           </p>
         </div>
 
@@ -149,6 +175,7 @@ export default function DevicesClient() {
                     }}
                   />
                 </div>
+
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#8B8599', display: 'block', marginBottom: 4 }}>
                     View type
@@ -169,6 +196,31 @@ export default function DevicesClient() {
                     ))}
                   </div>
                 </div>
+
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#8B8599', display: 'block', marginBottom: 4 }}>
+                    Orientation
+                  </label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {(['landscape', 'portrait'] as const).map(o => (
+                      <button key={o} onClick={() => setNewOrient(o)}
+                        style={{
+                          padding: '8px 14px', borderRadius: 7, fontSize: 13, cursor: 'pointer',
+                          border: `1.5px solid ${newOrient === o ? '#C4522A' : '#E2DDD6'}`,
+                          background: newOrient === o ? '#FEF2EB' : '#fff',
+                          color: newOrient === o ? '#C4522A' : '#4A4A5A',
+                          fontWeight: newOrient === o ? 600 : 500,
+                          fontFamily: 'inherit',
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                        }}>
+                        {o === 'landscape'
+                          ? <><Monitor size={13} /> Landscape (TV)</>
+                          : <><Smartphone size={13} /> Portrait</>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {newType === 'personal' && (
                   <div>
                     <label style={{ fontSize: 12, fontWeight: 600, color: '#8B8599', display: 'block', marginBottom: 4 }}>
@@ -184,6 +236,7 @@ export default function DevicesClient() {
                     </select>
                   </div>
                 )}
+
                 <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                   <button onClick={create} disabled={creating || !newLabel.trim() || (newType === 'personal' && !newMember)}
                     style={{
@@ -194,7 +247,7 @@ export default function DevicesClient() {
                     }}>
                     {creating ? 'Creating…' : 'Create Device'}
                   </button>
-                  <button onClick={() => { setShowAdd(false); setNewLabel(''); setNewMember('') }}
+                  <button onClick={() => { setShowAdd(false); setNewLabel(''); setNewMember(''); setNewOrient('landscape') }}
                     style={{
                       background: '#fff', color: '#4A4A5A',
                       border: '1.5px solid #E2DDD6', borderRadius: 7,
@@ -233,6 +286,7 @@ export default function DevicesClient() {
                 ? `${window.location.origin}/d/${d.token}`
                 : `/d/${d.token}`
               const qrUrl = `/api/qr/${d.token}`
+              const isPortrait = d.orientation === 'portrait'
               return (
                 <div key={d.id} style={{
                   background: '#fff', border: '1px solid #E8E3DB',
@@ -246,7 +300,7 @@ export default function DevicesClient() {
                       borderRadius: 8, background: '#fff',
                     }} />
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
                       {d.view_type === 'kitchen'
                         ? <Tv size={15} style={{ color: '#C4522A' }} />
                         : <User size={15} style={{ color: '#7C3AED' }} />}
@@ -257,6 +311,14 @@ export default function DevicesClient() {
                         color:      d.view_type === 'kitchen' ? '#C4522A' : '#7C3AED',
                       }}>
                         {d.view_type === 'kitchen' ? 'Kitchen' : `Personal · ${memberName(d.member_id)}`}
+                      </span>
+                      <span style={{
+                        fontSize: 11, padding: '2px 7px', borderRadius: 10, fontWeight: 600,
+                        background: '#F0EDE8', color: '#4A4A5A',
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                      }}>
+                        {isPortrait ? <Smartphone size={11} /> : <Monitor size={11} />}
+                        {isPortrait ? 'Portrait' : 'Landscape'}
                       </span>
                     </div>
                     <div style={{
@@ -275,7 +337,7 @@ export default function DevicesClient() {
                         {copied === d.id ? <Check size={13} /> : <Copy size={13} />}
                       </button>
                     </div>
-                    <div style={{ marginTop: 6, display: 'flex', gap: 8 }}>
+                    <div style={{ marginTop: 6, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                       <a href={url} target="_blank" rel="noreferrer"
                         style={{
                           fontSize: 12, color: '#1D4ED8', textDecoration: 'none',
@@ -290,6 +352,16 @@ export default function DevicesClient() {
                         }}>
                         QR full size <ExternalLink size={11} />
                       </a>
+                      <span style={{ fontSize: 12, color: '#8B8599' }}>·</span>
+                      <button onClick={() => setOrientation(d.id, isPortrait ? 'landscape' : 'portrait')}
+                        style={{
+                          fontSize: 12, color: '#4A4A5A', background: 'none',
+                          border: '1px solid #DDD8CF', borderRadius: 6, padding: '3px 8px',
+                          cursor: 'pointer', fontFamily: 'inherit',
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                        }}>
+                        Switch to {isPortrait ? <><Monitor size={11} /> Landscape</> : <><Smartphone size={11} /> Portrait</>}
+                      </button>
                     </div>
                   </div>
                   <button onClick={() => remove(d.id, d.label)}

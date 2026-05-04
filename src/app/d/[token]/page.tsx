@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { getKitchenData, getDashboardForMember } from '@/lib/dashboard-data'
 import KitchenDashboard from '@/lib/KitchenDashboard'
+import KitchenDashboardPortrait from '@/lib/KitchenDashboardPortrait'
 import PersonalDashboard from '@/lib/PersonalDashboard'
 
 export const dynamic = 'force-dynamic'
@@ -17,15 +18,27 @@ export default async function DevicePage({
   const supabase = getSupabaseAdmin()
   const { data: device } = await supabase
     .from('device_tokens')
-    .select('view_type, member_id, label')
+    .select('view_type, orientation, member_id, label')
     .eq('token', token)
     .maybeSingle()
 
   if (!device) notFound()
 
+  const orientation: 'landscape' | 'portrait' = device.orientation === 'portrait' ? 'portrait' : 'landscape'
+
   if (device.view_type === 'kitchen') {
     const data = await getKitchenData()
     if (!data) notFound()
+    if (orientation === 'portrait') {
+      return (
+        <KitchenDashboardPortrait
+          columns={data.columns}
+          calendar={data.calendar}
+          members={data.members}
+          deviceToken={token}
+        />
+      )
+    }
     return (
       <KitchenDashboard
         columns={data.columns}
@@ -36,7 +49,7 @@ export default async function DevicePage({
     )
   }
 
-  // personal
+  // personal — landscape only for now
   if (!device.member_id) notFound()
   const data = await getDashboardForMember(device.member_id)
   if (!data) notFound()
