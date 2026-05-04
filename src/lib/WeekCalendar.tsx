@@ -87,11 +87,15 @@ function densityScale(density: Density) {
   }
 }
 
+// Per-event sizing based on block height percentage of the visible time range.
+// The smallest tiers use tight line-height so a single-line title plus a
+// single-line driver row both fit without clipping.
 function eventBlockStyle(heightPct: number) {
   if (heightPct >= 12) return {
     titleSize: 'clamp(13px, 1.05vw, 17px)',
     locSize:   'clamp(11px, 0.85vw, 13px)',
     pad:       '6px 10px',
+    lineHeight: 1.2,
     showLocation: true,
     showChips: true,
   }
@@ -99,27 +103,31 @@ function eventBlockStyle(heightPct: number) {
     titleSize: 'clamp(12px, 0.95vw, 15px)',
     locSize:   'clamp(10px, 0.8vw, 12px)',
     pad:       '4px 8px',
+    lineHeight: 1.2,
     showLocation: true,
     showChips: true,
   }
   if (heightPct >= 3.5) return {
-    titleSize: 'clamp(11px, 0.85vw, 13px)',
+    titleSize: 'clamp(10px, 0.78vw, 12px)',
     locSize:   'clamp(9px, 0.7vw, 11px)',
-    pad:       '3px 6px',
-    showLocation: true,
+    pad:       '2px 5px',
+    lineHeight: 1.1,
+    showLocation: false,
     showChips: false,
   }
   if (heightPct >= 2) return {
-    titleSize: 'clamp(10px, 0.78vw, 12px)',
-    locSize:   'clamp(9px, 0.7vw, 10px)',
-    pad:       '2px 5px',
+    titleSize: 'clamp(9px, 0.7vw, 11px)',
+    locSize:   'clamp(8px, 0.65vw, 10px)',
+    pad:       '1px 4px',
+    lineHeight: 1.05,
     showLocation: false,
     showChips: false,
   }
   return {
-    titleSize: 'clamp(9px, 0.7vw, 11px)',
+    titleSize: 'clamp(8px, 0.65vw, 10px)',
     locSize:   'clamp(8px, 0.65vw, 10px)',
-    pad:       '1px 4px',
+    pad:       '1px 3px',
+    lineHeight: 1.05,
     showLocation: false,
     showChips: false,
   }
@@ -151,11 +159,15 @@ function ChipRow({ involvedIds, members, chipSize, chipFontSize, chipGap }: {
   )
 }
 
+// School event title cleanup:
+//  1. Strip parentheticals like "(Boston, Hailee, Sadie)"
+//  2. Strip the "School " prefix so the chip can fit "Drop-off" on a single
+//     line and leave room for the driver row underneath.
 function displayTitle(e: DashboardCalendarEvent): string {
-  if (e.isSchoolEvent) {
-    return e.title.replace(/\s*\([^)]*\)\s*/g, '').trim() || e.title
-  }
-  return e.title
+  if (!e.isSchoolEvent) return e.title
+  let t = e.title.replace(/\s*\([^)]*\)\s*/g, '').trim()
+  t = t.replace(/^School\s+/i, '')
+  return t || e.title
 }
 
 export default function WeekCalendar({
@@ -236,8 +248,6 @@ export default function WeekCalendar({
   const pctTop = (startMin: number) => ((startMin - startHour * 60) / totalMin) * 100
   const pctHeight = (startMin: number, endMin: number) => ((endMin - startMin) / totalMin) * 100
 
-  // Time grid intrinsic minimum height — guarantees visibility when parent
-  // doesn't constrain height (e.g., personal dashboard layout).
   const minGridHeight = (endHour - startHour) * s.minPxPerHour
 
   return (
@@ -324,7 +334,6 @@ export default function WeekCalendar({
         </div>
       )}
 
-      {/* Time grid — minHeight guarantees usable size when parent doesn't constrain */}
       <div style={{
         position: 'relative', display: 'grid',
         gridTemplateColumns: `${s.leftColW} repeat(7, 1fr)`,
@@ -371,6 +380,7 @@ export default function WeekCalendar({
                 const driverName = driverNameOf(e.driverId)
                 const needsDriver = e.transportStatus === 'needs_driver' && !e.driverId
                 const title = displayTitle(e)
+                const isTinyBlock = heightPct < 4
 
                 return (
                   <div key={e.id}
@@ -384,16 +394,20 @@ export default function WeekCalendar({
                       borderRadius: 5,
                       padding: blockStyle.pad,
                       fontSize: blockStyle.titleSize,
-                      lineHeight: 1.2,
+                      lineHeight: blockStyle.lineHeight,
                       boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
                       borderLeft: needsDriver ? `4px solid ${theme.nowLine}` : undefined,
-                      display: 'flex', flexDirection: 'column', gap: 1,
+                      display: 'flex', flexDirection: 'column', gap: 0,
                       overflow: 'hidden',
                       zIndex: 1,
                     }}>
                     <div style={{
                       fontWeight: 600,
-                      wordBreak: 'break-word', whiteSpace: 'normal',
+                      wordBreak: 'break-word',
+                      whiteSpace: isTinyBlock ? 'nowrap' : 'normal',
+                      overflow: isTinyBlock ? 'hidden' : 'visible',
+                      textOverflow: isTinyBlock ? 'ellipsis' : 'clip',
+                      flexShrink: 0,
                     }}>
                       {title}
                     </div>
@@ -404,12 +418,28 @@ export default function WeekCalendar({
                       </div>
                     )}
                     {driverName && (
-                      <div style={{ fontSize: blockStyle.locSize, opacity: 0.95, fontWeight: 500 }}>
+                      <div style={{
+                        fontSize: blockStyle.locSize,
+                        opacity: 0.95,
+                        fontWeight: 500,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        flexShrink: 0,
+                      }}>
                         🚗 {driverName}
                       </div>
                     )}
                     {needsDriver && (
-                      <div style={{ fontSize: blockStyle.locSize, opacity: 0.95, fontWeight: 600 }}>
+                      <div style={{
+                        fontSize: blockStyle.locSize,
+                        opacity: 0.95,
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        flexShrink: 0,
+                      }}>
                         ⚠ needs driver
                       </div>
                     )}
