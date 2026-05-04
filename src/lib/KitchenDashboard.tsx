@@ -26,8 +26,31 @@ function formatTime(minutes: number): string {
   return m === 0 ? `${hr} ${period}` : `${hr}:${String(m).padStart(2, '0')} ${period}`
 }
 
-export default function KitchenDashboard({ columns, calendar, members, deviceToken }: Props) {
+export default function KitchenDashboard({
+  columns: initialColumns,
+  calendar,
+  members: initialMembers,
+  deviceToken,
+}: Props) {
+  const [columns, setColumns] = useState<KitchenColumn[]>(initialColumns)
+  const [members, setMembers] = useState(initialMembers)
   const [now, setNow] = useState(new Date())
+
+  // Poll for fresh tasks/ideas every 10 seconds — keeps the TV in sync
+  // with admin actions without needing manual refresh.
+  useEffect(() => {
+    const refresh = async () => {
+      try {
+        const res = await fetch('/api/dashboard/columns')
+        if (!res.ok) return
+        const data = await res.json()
+        if (Array.isArray(data.columns)) setColumns(data.columns)
+        if (Array.isArray(data.members)) setMembers(data.members)
+      } catch {}
+    }
+    const t = setInterval(refresh, 10_000)
+    return () => clearInterval(t)
+  }, [])
   const [photos, setPhotos] = useState<string[]>([])
   const [photoIdx, setPhotoIdx] = useState(0)
   const [photoVisible, setPhotoVisible] = useState(true)
