@@ -14,15 +14,21 @@ export async function PATCH(
   try {
     const body = await req.json()
     const update: Record<string, any> = {}
+
+    // Map both snake_case and camelCase / legacy names to real columns
     if (body.display_name !== undefined) update.display_name = body.display_name
     if (body.name !== undefined)         update.display_name = body.name
+    if (body.username !== undefined)     update.username = body.username
+    if (body.email !== undefined)        update.email = body.email
+    if (body.type !== undefined)         update.type = body.type
+    if (body.member_type !== undefined)  update.type = body.member_type
+    if (body.role !== undefined)         update.role = body.role
     if (body.color !== undefined)        update.color = body.color
-    if (body.member_type !== undefined)  update.member_type = body.member_type
-    if (body.type !== undefined)         update.member_type = body.type
+    if (body.phone !== undefined)        update.phone = body.phone
     if (body.can_drive !== undefined)    update.can_drive = body.can_drive
     if (body.canDrive !== undefined)     update.can_drive = body.canDrive
-    if (body.phone !== undefined)        update.phone = body.phone
-    if (body.email !== undefined)        update.email = body.email
+    if (body.ics_feeds !== undefined)    update.ics_feeds = body.ics_feeds
+    if (body.auth_user_id !== undefined) update.auth_user_id = body.auth_user_id
 
     const supabase = getSupabaseAdmin()
     const { data, error } = await supabase

@@ -5,7 +5,6 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
-// List all family members
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -23,15 +22,24 @@ export async function GET() {
   return NextResponse.json({ members: data ?? [] })
 }
 
-// Create a new family member.
-// Accepts a flexible body — only `display_name` is required.
-// `id` is optional; if omitted, we slugify the display name.
 function slugify(s: string) {
   return s.toLowerCase().trim()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '')
 }
 
+// Real schema (Nov 2025):
+//   id            text NOT NULL
+//   username      text NOT NULL
+//   email         text NOT NULL
+//   display_name  text NOT NULL
+//   type          text NOT NULL    ← NOT member_type
+//   role          text NOT NULL
+//   phone         text NULL
+//   color         text NULL
+//   can_drive     boolean NOT NULL
+//   ics_feeds     text[] NULL
+//   auth_user_id  uuid NULL
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -44,20 +52,31 @@ export async function POST(req: NextRequest) {
     }
 
     const id = (body.id ?? slugify(display_name)).toString()
-    const color = body.color ?? null
-    const member_type = body.member_type ?? body.type ?? null
-    const can_drive = body.can_drive ?? body.canDrive ?? null
-    const phone = body.phone ?? null
-    const email = body.email ?? null
 
-    // Build insert object with only fields that were actually provided —
-    // avoids inserting null into NOT NULL columns we don't know about.
-    const insert: Record<string, any> = { id, display_name }
-    if (color !== null)       insert.color = color
-    if (member_type !== null) insert.member_type = member_type
-    if (can_drive !== null)   insert.can_drive = can_drive
-    if (phone !== null)       insert.phone = phone
-    if (email !== null)       insert.email = email
+    // Defaults for NOT NULL columns so the insert can't fail on missing fields
+    const insert: Record<string, any> = {
+      id,
+      display_name,
+      username:  (body.username ?? id).toString(),
+      email:     (body.email ?? '').toString(),
+      type:      (body.type ?? body.member_type ?? 'adult').toString(),
+      role:      (body.role ?? 'member').toString(),
+      can_drive: body.can_drive ?? body.canDrive ?? false,
+    }
+
+    // Optional columns — only set if provided
+    if (body.phone !== undefined && body.phone !== null) {
+      insert.phone = body.phone.toString()
+    }
+    if (body.color !== undefined && body.color !== null) {
+      insert.color = body.color.toString()
+    }
+    if (body.ics_feeds !== undefined && body.ics_feeds !== null) {
+      insert.ics_feeds = body.ics_feeds
+    }
+    if (body.auth_user_id !== undefined && body.auth_user_id !== null) {
+      insert.auth_user_id = body.auth_user_id
+    }
 
     const supabase = getSupabaseAdmin()
     const { data, error } = await supabase
