@@ -46,19 +46,19 @@ function pickEventColor(event: DashboardCalendarEvent,
   return { bg: isDark ? NEUTRAL_DARK : NEUTRAL_LIGHT, fg: '#fff' }
 }
 
+// Tight time range: floor of earliest hour to ceiling of latest hour.
+// No buffer above/below, no minimum span.
 function computeTimeRange(events: DashboardCalendarEvent[]): { startHour: number; endHour: number } {
   const timed = events.filter(e => !e.allDay)
-  if (timed.length === 0) return { startHour: 7, endHour: 21 }
+  if (timed.length === 0) return { startHour: 8, endHour: 18 }
   let minMin = Infinity, maxMin = -Infinity
   for (const e of timed) {
     if (e.startMinutes < minMin) minMin = e.startMinutes
     if (e.endMinutes > maxMin) maxMin = e.endMinutes
   }
-  const startHour = Math.max(0, Math.floor(minMin / 60) - 1)
-  const endHour   = Math.min(24, Math.ceil(maxMin / 60) + 1)
-  if (endHour - startHour < 12) {
-    return { startHour: Math.max(0, Math.min(startHour, 7)), endHour: Math.min(24, Math.max(endHour, startHour + 12)) }
-  }
+  const startHour = Math.max(0, Math.floor(minMin / 60))
+  const endHour   = Math.min(24, Math.ceil(maxMin / 60))
+  if (endHour <= startHour) return { startHour, endHour: startHour + 1 }
   return { startHour, endHour }
 }
 
@@ -67,23 +67,63 @@ function densityScale(density: Density) {
     hourLabelSize: 'clamp(11px, 0.85vw, 14px)',
     dayLabelSize:  'clamp(10px, 0.75vw, 12px)',
     dayNumSize:    'clamp(13px, 1.05vw, 17px)',
-    eventTitleSize:'clamp(12px, 1vw, 16px)',
     eventLocSize:  'clamp(10px, 0.8vw, 12px)',
     allDayBlockSize:'clamp(11px, 0.85vw, 13px)',
     leftColW:      'clamp(40px, 3.5vw, 56px)',
-    chipSize:      'clamp(16px, 1.4vw, 22px)',
-    chipFontSize:  'clamp(9px, 0.7vw, 11px)',
-    chipGap:       4,
+    chipSize:      'clamp(14px, 1.2vw, 18px)',
+    chipFontSize:  'clamp(8px, 0.65vw, 10px)',
+    chipGap:       3,
   }
   if (density === 'comfortable') return {
     hourLabelSize: '11px', dayLabelSize: '11px', dayNumSize: '14px',
-    eventTitleSize: '12px', eventLocSize: '10px', allDayBlockSize: '11px',
+    eventLocSize: '10px', allDayBlockSize: '11px',
     leftColW: '48px', chipSize: 18, chipFontSize: 10, chipGap: 3,
   }
   return {
     hourLabelSize: '10px', dayLabelSize: '10px', dayNumSize: '12px',
-    eventTitleSize: '10px', eventLocSize: '9px', allDayBlockSize: '10px',
+    eventLocSize: '9px', allDayBlockSize: '10px',
     leftColW: '40px', chipSize: 14, chipFontSize: 8, chipGap: 2,
+  }
+}
+
+// Font + padding scale based on the event block's height as a percentage
+// of the visible time range. Tight content for short events.
+function eventBlockStyle(heightPct: number) {
+  if (heightPct >= 12) return {
+    titleSize: 'clamp(13px, 1.05vw, 17px)',
+    locSize:   'clamp(11px, 0.85vw, 13px)',
+    pad:       '6px 10px',
+    showLocation: true,
+    showChips: true,
+  }
+  if (heightPct >= 6) return {
+    titleSize: 'clamp(12px, 0.95vw, 15px)',
+    locSize:   'clamp(10px, 0.8vw, 12px)',
+    pad:       '4px 8px',
+    showLocation: true,
+    showChips: true,
+  }
+  if (heightPct >= 3.5) return {
+    titleSize: 'clamp(11px, 0.85vw, 13px)',
+    locSize:   'clamp(9px, 0.7vw, 11px)',
+    pad:       '3px 6px',
+    showLocation: true,
+    showChips: false,
+  }
+  if (heightPct >= 2) return {
+    titleSize: 'clamp(10px, 0.78vw, 12px)',
+    locSize:   'clamp(9px, 0.7vw, 10px)',
+    pad:       '2px 5px',
+    showLocation: false,
+    showChips: false,
+  }
+  // Very small block — just the title, tiny font
+  return {
+    titleSize: 'clamp(9px, 0.7vw, 11px)',
+    locSize:   'clamp(8px, 0.65vw, 10px)',
+    pad:       '1px 4px',
+    showLocation: false,
+    showChips: false,
   }
 }
 
@@ -97,7 +137,7 @@ function ChipRow({ involvedIds, members, chipSize, chipFontSize, chipGap }: {
     .filter((m): m is FamilyMemberColor => !!m)
   if (involved.length === 0) return null
   return (
-    <div style={{ display: 'flex', gap: chipGap, marginTop: chipGap, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: chipGap, marginTop: 2, flexWrap: 'wrap' }}>
       {involved.map(m => (
         <div key={m.id} title={m.display_name} style={{
           width: chipSize as any, height: chipSize as any, borderRadius: '50%',
@@ -111,6 +151,15 @@ function ChipRow({ involvedIds, members, chipSize, chipFontSize, chipGap }: {
       ))}
     </div>
   )
+}
+
+// Strip "(Boston, Hailee, Sadie)" and similar parentheticals from school
+// event titles for cleaner display while preserving the underlying data.
+function displayTitle(e: DashboardCalendarEvent): string {
+  if (e.isSchoolEvent) {
+    return e.title.replace(/\s*\([^)]*\)\s*/g, '').trim() || e.title
+  }
+  return e.title
 }
 
 export default function WeekCalendar({
@@ -202,7 +251,7 @@ export default function WeekCalendar({
       transition: 'background 0.5s, color 0.5s, border-color 0.5s',
       minHeight: 0, minWidth: 0,
     }}>
-      {/* Compact day headers — day label + number on one baseline, no top bar */}
+      {/* Compact day headers */}
       <div style={{ display: 'grid',
                     gridTemplateColumns: `${s.leftColW} repeat(7, 1fr)`,
                     borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
@@ -267,7 +316,7 @@ export default function WeekCalendar({
                       padding: '3px 8px', borderRadius: 4,
                       lineHeight: 1.4, wordBreak: 'break-word',
                     }}>
-                      {e.title}
+                      {displayTitle(e)}
                     </div>
                   )
                 })}
@@ -319,9 +368,11 @@ export default function WeekCalendar({
               {dayEvts.map(e => {
                 const c = pickEventColor(e, members, isDark)
                 const top = pctTop(e.startMinutes)
-                const heightPct = Math.max(pctHeight(e.startMinutes, e.endMinutes), 5)
+                const heightPct = Math.max(pctHeight(e.startMinutes, e.endMinutes), 1.5)
+                const blockStyle = eventBlockStyle(heightPct)
                 const driverName = driverNameOf(e.driverId)
                 const needsDriver = e.transportStatus === 'needs_driver' && !e.driverId
+                const title = displayTitle(e)
 
                 return (
                   <div key={e.id}
@@ -333,11 +384,12 @@ export default function WeekCalendar({
                       left: 3, right: 3,
                       background: c.bg, color: c.fg,
                       borderRadius: 5,
-                      padding: 'clamp(4px, 0.5vh, 10px) clamp(6px, 0.6vw, 12px)',
-                      fontSize: s.eventTitleSize as any, lineHeight: 1.25,
+                      padding: blockStyle.pad,
+                      fontSize: blockStyle.titleSize,
+                      lineHeight: 1.2,
                       boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
                       borderLeft: needsDriver ? `4px solid ${theme.nowLine}` : undefined,
-                      display: 'flex', flexDirection: 'column', gap: 2,
+                      display: 'flex', flexDirection: 'column', gap: 1,
                       overflow: 'hidden',
                       zIndex: 1,
                     }}>
@@ -345,25 +397,25 @@ export default function WeekCalendar({
                       fontWeight: 600,
                       wordBreak: 'break-word', whiteSpace: 'normal',
                     }}>
-                      {e.title}
+                      {title}
                     </div>
-                    {e.location && (
-                      <div style={{ fontSize: s.eventLocSize as any, opacity: 0.85,
+                    {blockStyle.showLocation && e.location && (
+                      <div style={{ fontSize: blockStyle.locSize, opacity: 0.85,
                                     wordBreak: 'break-word' }}>
                         {e.location}
                       </div>
                     )}
                     {driverName && (
-                      <div style={{ fontSize: s.eventLocSize as any, opacity: 0.95, fontWeight: 500 }}>
+                      <div style={{ fontSize: blockStyle.locSize, opacity: 0.95, fontWeight: 500 }}>
                         🚗 {driverName}
                       </div>
                     )}
                     {needsDriver && (
-                      <div style={{ fontSize: s.eventLocSize as any, opacity: 0.95, fontWeight: 600 }}>
+                      <div style={{ fontSize: blockStyle.locSize, opacity: 0.95, fontWeight: 600 }}>
                         ⚠ needs driver
                       </div>
                     )}
-                    {e.involvedIds && e.involvedIds.length > 0 && (
+                    {blockStyle.showChips && e.involvedIds && e.involvedIds.length > 0 && (
                       <ChipRow
                         involvedIds={e.involvedIds}
                         members={members}
