@@ -18,6 +18,8 @@ type Props = {
   deviceToken?: string
 }
 
+type DinnerSlot = { dayIdx: number; meal: string; cook: string }
+
 function formatTime(minutes: number): string {
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
@@ -38,6 +40,7 @@ export default function KitchenDashboardPortrait({
   const [photos, setPhotos]               = useState<string[]>([])
   const [photoIdx, setPhotoIdx]           = useState(0)
   const [photoVisible, setPhotoVisible]   = useState(true)
+  const [dinner, setDinner]               = useState<DinnerSlot[]>([])
   const [vp, setVp] = useState({ w: 1920, h: 1080 })
 
   // Poll for fresh tasks/ideas every 10 seconds.
@@ -52,6 +55,21 @@ export default function KitchenDashboardPortrait({
       } catch {}
     }
     const t = setInterval(refresh, 10_000)
+    return () => clearInterval(t)
+  }, [])
+
+  // Load dinner once on mount, refresh every 60s
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch('/api/dashboard/dinner')
+        if (!res.ok) return
+        const data = await res.json()
+        if (Array.isArray(data.dinner)) setDinner(data.dinner)
+      } catch {}
+    }
+    load()
+    const t = setInterval(load, 60_000)
     return () => clearInterval(t)
   }, [])
 
@@ -108,6 +126,10 @@ export default function KitchenDashboardPortrait({
   const dateStr = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
   const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 
+  // After 8 PM, switch the rail to a "Tomorrow" preview.
+  const isPostEvening = now.getHours() >= 20
+  const previewLabel = isPostEvening ? 'Tomorrow' : 'Today'
+
   const todayEvents = useMemo(() => {
     if (!calendar) return []
     const start = new Date(calendar.weekStart + 'T00:00:00')
@@ -115,6 +137,20 @@ export default function KitchenDashboardPortrait({
       (new Date(now.toDateString()).getTime() - start.getTime()) / 86400000
     )
     if (todayIdx < 0 || todayIdx > 6) return []
+
+    if (isPostEvening) {
+      const tomorrowIdx = todayIdx + 1
+      if (tomorrowIdx > 6) return []
+      return calendar.events
+        .filter((e: DashboardCalendarEvent) => e.dayIdx === tomorrowIdx)
+        .sort((a, b) => {
+          if (a.allDay && !b.allDay) return -1
+          if (!a.allDay && b.allDay) return 1
+          return a.startMinutes - b.startMinutes
+        })
+        .slice(0, 5)
+    }
+
     const nowMin = now.getHours() * 60 + now.getMinutes()
     return calendar.events
       .filter((e: DashboardCalendarEvent) => e.dayIdx === todayIdx)
@@ -125,7 +161,7 @@ export default function KitchenDashboardPortrait({
         return a.startMinutes - b.startMinutes
       })
       .slice(0, 5)
-  }, [calendar, now])
+  }, [calendar, now, isPostEvening])
 
   const eventColor = (e: DashboardCalendarEvent): string => {
     if (e.isSchoolEvent) return '#FEF3C7'
@@ -157,6 +193,18 @@ export default function KitchenDashboardPortrait({
   const topRow    = paddedColumns.slice(0, 4)
   const bottomRow = paddedColumns.slice(4, 8)
 
+  // Each row's grid columns: empty placeholders shrink, empty real members
+  // shrink less, active members get extra space. Lets active cards breathe.
+  const colWidthFor = (col: typeof paddedColumns[number]): string => {
+    const isPlaceholder = col.member.id.startsWith('__empty__')
+    if (isPlaceholder) return '0.4fr'
+    const isEmpty = col.tasks.length === 0 && col.ideas.length === 0
+    if (isEmpty) return '0.7fr'
+    return '1.6fr'
+  }
+  const topRowCols = topRow.map(colWidthFor).join(' ')
+  const bottomRowCols = bottomRow.map(colWidthFor).join(' ')
+
   const FamilyCard = ({ col }: { col: typeof paddedColumns[number] }) => {
     const isPlaceholder = col.member.id.startsWith('__empty__')
     const isEmpty = !isPlaceholder && col.tasks.length === 0 && col.ideas.length === 0
@@ -165,7 +213,7 @@ export default function KitchenDashboardPortrait({
       return (
         <div style={{
           background: theme.muted, border: `1px dashed ${theme.border}`,
-          borderRadius: 10, opacity: 0.3, minHeight: 0,
+          borderRadius: 10, opacity: 0.25, minHeight: 0, minWidth: 0,
         }} />
       )
     }
@@ -174,7 +222,7 @@ export default function KitchenDashboardPortrait({
         background: isEmpty ? theme.muted : theme.card,
         border: `1px solid ${theme.border}`,
         borderRadius: 10,
-        overflow: 'hidden', minHeight: 0,
+        overflow: 'hidden', minHeight: 0, minWidth: 0,
         display: 'flex', flexDirection: 'column',
         opacity: isEmpty ? 0.7 : 1,
       }}>
@@ -184,15 +232,19 @@ export default function KitchenDashboardPortrait({
         }} />
         <div style={{
           padding: '6px 10px 4px',
-          fontSize: 17, fontWeight: 700, color: theme.text, lineHeight: 1.1,
+          fontSize: isEmpty ? 14 : 17,
+          fontWeight: 700, color: theme.text, lineHeight: 1.1,
           flexShrink: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
         }}>
           {col.member.display_name}
         </div>
         {isEmpty ? (
           <div style={{
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 13, color: theme.subtext, fontStyle: 'italic',
+            fontSize: 12, color: theme.subtext, fontStyle: 'italic',
           }}>
             —
           </div>
@@ -254,6 +306,7 @@ export default function KitchenDashboardPortrait({
             members={members}
             darkMode={isDark}
             fillHeight
+            dinner={dinner}
           />
         ) : (
           <div style={{
@@ -267,10 +320,10 @@ export default function KitchenDashboardPortrait({
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, minHeight: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: topRowCols, gap: 8, minHeight: 0 }}>
         {topRow.map(col => <FamilyCard key={col.member.id} col={col} />)}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, minHeight: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: bottomRowCols, gap: 8, minHeight: 0 }}>
         {bottomRow.map(col => <FamilyCard key={col.member.id} col={col} />)}
       </div>
 
@@ -307,10 +360,12 @@ export default function KitchenDashboardPortrait({
             fontSize: 10, fontWeight: 700, color: theme.subtext,
             textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4,
           }}>
-            Today
+            {previewLabel}
           </div>
           {todayEvents.length === 0 ? (
-            <div style={{ fontSize: 12, color: theme.subtext, fontStyle: 'italic' }}>Nothing left</div>
+            <div style={{ fontSize: 12, color: theme.subtext, fontStyle: 'italic' }}>
+              {isPostEvening ? 'Nothing tomorrow' : 'Nothing left'}
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3, overflow: 'hidden', flex: 1, minHeight: 0 }}>
               {todayEvents.map(e => (

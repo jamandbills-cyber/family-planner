@@ -54,6 +54,7 @@ export default function KitchenDashboard({
   const [photos, setPhotos] = useState<string[]>([])
   const [photoIdx, setPhotoIdx] = useState(0)
   const [photoVisible, setPhotoVisible] = useState(true)
+  const [dinner, setDinner] = useState<{ dayIdx: number; meal: string; cook: string }[]>([])
 
   // Tick clock every 30s
   useEffect(() => {
@@ -88,6 +89,21 @@ export default function KitchenDashboard({
     return () => clearInterval(rotate)
   }, [photos.length])
 
+  // Load dinner once on mount, refresh every 60s
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch('/api/dashboard/dinner')
+        if (!res.ok) return
+        const data = await res.json()
+        if (Array.isArray(data.dinner)) setDinner(data.dinner)
+      } catch {}
+    }
+    load()
+    const t = setInterval(load, 60_000)
+    return () => clearInterval(t)
+  }, [])
+
   // Auto dark mode 7 PM – 7 AM
   const isDark = now.getHours() >= 19 || now.getHours() < 7
 
@@ -105,7 +121,11 @@ export default function KitchenDashboard({
   const dateStr = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
   const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 
-  // Today's events from calendar
+  // After 8 PM (or when today has nothing remaining), switch to a
+  // "Tomorrow" preview so the rail stays useful at night.
+  const isPostEvening = now.getHours() >= 20
+  const previewLabel = isPostEvening ? 'Tomorrow' : 'Today'
+
   const todayEvents = useMemo(() => {
     if (!calendar) return []
     const start = new Date(calendar.weekStart + 'T00:00:00')
@@ -113,13 +133,23 @@ export default function KitchenDashboard({
       (new Date(now.toDateString()).getTime() - start.getTime()) / 86400000
     )
     if (todayIdx < 0 || todayIdx > 6) return []
+
+    if (isPostEvening) {
+      const tomorrowIdx = todayIdx + 1
+      if (tomorrowIdx > 6) return []
+      return calendar.events
+        .filter((e: DashboardCalendarEvent) => e.dayIdx === tomorrowIdx && !e.allDay)
+        .sort((a, b) => a.startMinutes - b.startMinutes)
+        .slice(0, 6)
+    }
+
     const nowMin = now.getHours() * 60 + now.getMinutes()
     return calendar.events
       .filter((e: DashboardCalendarEvent) => e.dayIdx === todayIdx && !e.allDay)
       .filter((e: DashboardCalendarEvent) => e.endMinutes > nowMin - 30)
       .sort((a, b) => a.startMinutes - b.startMinutes)
       .slice(0, 6)
-  }, [calendar, now])
+  }, [calendar, now, isPostEvening])
 
   const memberById = useMemo(() => {
     const m = new Map<string, { display_name: string; color: string | null }>()
@@ -172,6 +202,7 @@ export default function KitchenDashboard({
             members={members}
             darkMode={isDark}
             fillHeight
+            dinner={dinner}
           />
         ) : (
           <div style={{
@@ -260,13 +291,13 @@ export default function KitchenDashboard({
             textTransform: 'uppercase', letterSpacing: '0.08em',
             marginBottom: 6, flexShrink: 0,
           }}>
-            Today
+            {previewLabel}
           </div>
           {todayEvents.length === 0 ? (
             <div style={{
               fontSize: 'clamp(11px, 0.9vw, 13px)', color: theme.subtext, fontStyle: 'italic',
             }}>
-              Nothing left today
+              {isPostEvening ? 'No events tomorrow' : 'Nothing left today'}
             </div>
           ) : (
             <div style={{

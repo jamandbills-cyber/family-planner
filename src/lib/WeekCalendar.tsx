@@ -6,6 +6,8 @@ import type { DashboardCalendarEvent } from '@/lib/types/calendar'
 type Density = 'compact' | 'comfortable' | 'tv'
 type FamilyMemberColor = { id: string; display_name: string; color: string | null }
 
+export type DinnerSlot = { dayIdx: number; meal: string; cook: string }
+
 type Props = {
   events: DashboardCalendarEvent[]
   syncedAt: string
@@ -15,6 +17,7 @@ type Props = {
   members?: FamilyMemberColor[]
   darkMode?: boolean
   fillHeight?: boolean
+  dinner?: DinnerSlot[]
 }
 
 const DAY_LABELS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -72,24 +75,25 @@ function densityScale(density: Density) {
     chipFontSize:  'clamp(8px, 0.65vw, 10px)',
     chipGap:       3,
     minPxPerHour:  40,
+    dinnerMealSize: 'clamp(11px, 0.85vw, 13px)',
+    dinnerCookSize: 'clamp(9px, 0.7vw, 11px)',
   }
   if (density === 'comfortable') return {
     hourLabelSize: '11px', dayLabelSize: '11px', dayNumSize: '14px',
     eventLocSize: '10px', allDayBlockSize: '11px',
     leftColW: '48px', chipSize: 18, chipFontSize: 10, chipGap: 3,
     minPxPerHour: 56,
+    dinnerMealSize: '11px', dinnerCookSize: '10px',
   }
   return {
     hourLabelSize: '10px', dayLabelSize: '10px', dayNumSize: '12px',
     eventLocSize: '9px', allDayBlockSize: '10px',
     leftColW: '40px', chipSize: 14, chipFontSize: 8, chipGap: 2,
     minPxPerHour: 40,
+    dinnerMealSize: '10px', dinnerCookSize: '9px',
   }
 }
 
-// Per-event sizing based on block height percentage of the visible time range.
-// The smallest tiers use tight line-height so a single-line title plus a
-// single-line driver row both fit without clipping.
 function eventBlockStyle(heightPct: number) {
   if (heightPct >= 12) return {
     titleSize: 'clamp(13px, 1.05vw, 17px)',
@@ -98,6 +102,7 @@ function eventBlockStyle(heightPct: number) {
     lineHeight: 1.2,
     showLocation: true,
     showChips: true,
+    showCarpoolNote: true,
   }
   if (heightPct >= 6) return {
     titleSize: 'clamp(12px, 0.95vw, 15px)',
@@ -106,6 +111,7 @@ function eventBlockStyle(heightPct: number) {
     lineHeight: 1.2,
     showLocation: true,
     showChips: true,
+    showCarpoolNote: true,
   }
   if (heightPct >= 3.5) return {
     titleSize: 'clamp(10px, 0.78vw, 12px)',
@@ -114,6 +120,7 @@ function eventBlockStyle(heightPct: number) {
     lineHeight: 1.1,
     showLocation: false,
     showChips: false,
+    showCarpoolNote: false,
   }
   if (heightPct >= 2) return {
     titleSize: 'clamp(9px, 0.7vw, 11px)',
@@ -122,6 +129,7 @@ function eventBlockStyle(heightPct: number) {
     lineHeight: 1.05,
     showLocation: false,
     showChips: false,
+    showCarpoolNote: false,
   }
   return {
     titleSize: 'clamp(8px, 0.65vw, 10px)',
@@ -130,6 +138,7 @@ function eventBlockStyle(heightPct: number) {
     lineHeight: 1.05,
     showLocation: false,
     showChips: false,
+    showCarpoolNote: false,
   }
 }
 
@@ -159,10 +168,6 @@ function ChipRow({ involvedIds, members, chipSize, chipFontSize, chipGap }: {
   )
 }
 
-// School event title cleanup:
-//  1. Strip parentheticals like "(Boston, Hailee, Sadie)"
-//  2. Strip the "School " prefix so the chip can fit "Drop-off" on a single
-//     line and leave room for the driver row underneath.
 function displayTitle(e: DashboardCalendarEvent): string {
   if (!e.isSchoolEvent) return e.title
   let t = e.title.replace(/\s*\([^)]*\)\s*/g, '').trim()
@@ -173,11 +178,15 @@ function displayTitle(e: DashboardCalendarEvent): string {
 export default function WeekCalendar({
   events: initialEvents, syncedAt: initialSyncedAt, weekStart,
   density = 'comfortable', poll = true, members = [], darkMode,
-  fillHeight = false,
+  fillHeight = false, dinner = [],
 }: Props) {
   const [events,   setEvents]   = useState(initialEvents)
   const [syncedAt, setSyncedAt] = useState(initialSyncedAt)
   const [now, setNow] = useState(new Date())
+
+  // Re-sync state when props change (parent passing fresh data via polling)
+  useEffect(() => { setEvents(initialEvents) }, [initialEvents])
+  useEffect(() => { setSyncedAt(initialSyncedAt) }, [initialSyncedAt])
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000)
@@ -205,10 +214,14 @@ export default function WeekCalendar({
     card: '#1E1E2E', border: '#2A2A3A', text: '#F0EDE7', subtext: '#8B8599',
     todayBg: '#22222F', todayAccent: '#FFB088',
     gridline: '#2A2A3A', nowLine: '#F87171',
+    activeRing: '#F87171',
+    dinnerBg: '#15151F', dinnerLabel: '#FFB088',
   } : {
     card: '#fff', border: '#E2DDD6', text: '#1A1A2E', subtext: '#8B8599',
     todayBg: '#FFFAF5', todayAccent: '#C4522A',
     gridline: '#F4F1EB', nowLine: '#DC2626',
+    activeRing: '#DC2626',
+    dinnerBg: '#FAF6EE', dinnerLabel: '#C4522A',
   }
 
   const { startHour, endHour } = useMemo(() => computeTimeRange(events), [events])
@@ -245,10 +258,27 @@ export default function WeekCalendar({
   const driverNameOf = (driverId: string | null | undefined) =>
     driverId ? (memberById.get(driverId)?.display_name ?? null) : null
 
+  const cookColorOf = (cookName: string): string | null => {
+    if (!cookName) return null
+    const lower = cookName.toLowerCase().trim()
+    const m = members.find(mem => mem.display_name.toLowerCase() === lower)
+    return m?.color ?? null
+  }
+
   const pctTop = (startMin: number) => ((startMin - startHour * 60) / totalMin) * 100
   const pctHeight = (startMin: number, endMin: number) => ((endMin - startMin) / totalMin) * 100
 
   const minGridHeight = (endHour - startHour) * s.minPxPerHour
+
+  const dinnerByDay = useMemo(() => {
+    const map = new Map<number, DinnerSlot>()
+    for (const d of dinner) {
+      if (typeof d.dayIdx === 'number') map.set(d.dayIdx, d)
+    }
+    return map
+  }, [dinner])
+
+  const hasAnyDinner = dinner.some(d => (d.meal && d.meal.trim()) || (d.cook && d.cook.trim()))
 
   return (
     <div style={{
@@ -381,10 +411,17 @@ export default function WeekCalendar({
                 const needsDriver = e.transportStatus === 'needs_driver' && !e.driverId
                 const title = displayTitle(e)
                 const isTinyBlock = heightPct < 4
+                const carpoolNote = (e as any).carpoolNote as string | undefined
+
+                // Active = currently happening, on today's column
+                const isActiveNow =
+                  dayIdx === todayDayIdx &&
+                  e.startMinutes <= nowMinutes &&
+                  e.endMinutes > nowMinutes
 
                 return (
                   <div key={e.id}
-                    title={`${e.title}${e.location ? ' · ' + e.location : ''}${driverName ? ' · driver: ' + driverName : ''}`}
+                    title={`${e.title}${e.location ? ' · ' + e.location : ''}${driverName ? ' · driver: ' + driverName : ''}${carpoolNote ? ' · ' + carpoolNote : ''}`}
                     style={{
                       position: 'absolute',
                       top: `${top}%`,
@@ -395,11 +432,13 @@ export default function WeekCalendar({
                       padding: blockStyle.pad,
                       fontSize: blockStyle.titleSize,
                       lineHeight: blockStyle.lineHeight,
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
+                      boxShadow: isActiveNow
+                        ? `0 0 0 3px ${theme.activeRing}, 0 2px 8px rgba(0,0,0,0.25)`
+                        : '0 1px 3px rgba(0,0,0,0.18)',
                       borderLeft: needsDriver ? `4px solid ${theme.nowLine}` : undefined,
                       display: 'flex', flexDirection: 'column', gap: 0,
                       overflow: 'hidden',
-                      zIndex: 1,
+                      zIndex: isActiveNow ? 2 : 1,
                     }}>
                     <div style={{
                       fontWeight: 600,
@@ -443,6 +482,19 @@ export default function WeekCalendar({
                         ⚠ needs driver
                       </div>
                     )}
+                    {blockStyle.showCarpoolNote && carpoolNote && carpoolNote.trim() && (
+                      <div style={{
+                        fontSize: blockStyle.locSize,
+                        opacity: 0.85,
+                        fontStyle: 'italic',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        flexShrink: 0,
+                      }}>
+                        💬 {carpoolNote}
+                      </div>
+                    )}
                     {blockStyle.showChips && e.involvedIds && e.involvedIds.length > 0 && (
                       <ChipRow
                         involvedIds={e.involvedIds}
@@ -467,6 +519,88 @@ export default function WeekCalendar({
           />
         )}
       </div>
+
+      {/* Dinner strip — only renders if there's at least one dinner with content */}
+      {hasAnyDinner && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: `${s.leftColW} repeat(7, 1fr)`,
+          borderTop: `1px solid ${theme.border}`,
+          background: theme.dinnerBg,
+          flexShrink: 0,
+        }}>
+          <div style={{
+            fontSize: s.eventLocSize as any,
+            color: theme.dinnerLabel,
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            textAlign: 'right',
+            paddingRight: 6,
+            paddingTop: 6,
+            paddingBottom: 6,
+          }}>
+            🍽
+          </div>
+          {Array.from({ length: 7 }).map((_, dayIdx) => {
+            const slot = dinnerByDay.get(dayIdx)
+            const meal = slot?.meal?.trim() ?? ''
+            const cook = slot?.cook?.trim() ?? ''
+            const cookColor = cookColorOf(cook)
+            const isToday = dayIdx === todayDayIdx
+            return (
+              <div key={dayIdx} style={{
+                borderLeft: `1px solid ${theme.gridline}`,
+                padding: '5px 6px 6px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1,
+                background: isToday ? theme.todayBg : 'transparent',
+                minWidth: 0,
+              }}>
+                {meal ? (
+                  <div style={{
+                    fontSize: s.dinnerMealSize as any,
+                    fontWeight: 600,
+                    color: theme.text,
+                    lineHeight: 1.15,
+                    wordBreak: 'break-word',
+                  }}>
+                    {meal}
+                  </div>
+                ) : (
+                  <div style={{
+                    fontSize: s.dinnerMealSize as any,
+                    color: theme.subtext,
+                    fontStyle: 'italic',
+                    opacity: 0.5,
+                  }}>—</div>
+                )}
+                {cook && (
+                  <div style={{
+                    fontSize: s.dinnerCookSize as any,
+                    color: theme.subtext,
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    lineHeight: 1.15,
+                  }}>
+                    {cookColor && (
+                      <span style={{
+                        width: 6, height: 6, borderRadius: '50%',
+                        background: cookColor, flexShrink: 0,
+                      }} />
+                    )}
+                    <span style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>{cook}</span>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {events.length === 0 && (
         <div style={{
