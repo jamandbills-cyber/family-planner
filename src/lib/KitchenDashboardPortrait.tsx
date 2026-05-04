@@ -31,15 +31,15 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
   const [photos, setPhotos]               = useState<string[]>([])
   const [photoIdx, setPhotoIdx]           = useState(0)
   const [photoVisible, setPhotoVisible]   = useState(true)
-  const [viewportPortrait, setViewportPortrait] = useState(true)
+  const [vp, setVp] = useState({ w: 1920, h: 1080 })
 
-  // Detect actual viewport orientation. On desktop preview (landscape window)
-  // we frame the portrait content in a 9:16 backdrop. On the rotated TV it fills.
+  // Track viewport. Display layout is always portrait dimensions
+  // (we swap w/h), then a 90° CSS rotation makes it fit the actual viewport.
   useEffect(() => {
-    const check = () => setViewportPortrait(window.innerHeight >= window.innerWidth)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
+    const update = () => setVp({ w: window.innerWidth, h: window.innerHeight })
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
   }, [])
 
   useEffect(() => {
@@ -123,7 +123,6 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
 
   const qrSrc = deviceToken ? `/api/qr/${deviceToken}` : null
 
-  // Pad to 8 columns so the 2x4 grid stays consistent even if a member is missing
   const paddedColumns = useMemo(() => {
     const arr = [...columns]
     while (arr.length < 8) {
@@ -138,8 +137,7 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
   const topRow    = paddedColumns.slice(0, 4)
   const bottomRow = paddedColumns.slice(4, 8)
 
-  // Reusable family column renderer
-  const FamilyCard = ({ col, idx }: { col: typeof paddedColumns[number]; idx: number }) => {
+  const FamilyCard = ({ col }: { col: typeof paddedColumns[number] }) => {
     const isPlaceholder = col.member.id.startsWith('__empty__')
     const isEmpty = !isPlaceholder && col.tasks.length === 0 && col.ideas.length === 0
 
@@ -151,7 +149,6 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
         }} />
       )
     }
-
     return (
       <div style={{
         background: isEmpty ? theme.muted : theme.card,
@@ -167,8 +164,7 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
         }} />
         <div style={{
           padding: '6px 10px 4px',
-          fontSize: 'clamp(13px, 1.3vh, 17px)',
-          fontWeight: 700, color: theme.text, lineHeight: 1.1,
+          fontSize: 17, fontWeight: 700, color: theme.text, lineHeight: 1.1,
           flexShrink: 0,
         }}>
           {col.member.display_name}
@@ -176,8 +172,7 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
         {isEmpty ? (
           <div style={{
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 'clamp(10px, 1vh, 12px)', color: theme.subtext,
-            fontStyle: 'italic',
+            fontSize: 13, color: theme.subtext, fontStyle: 'italic',
           }}>
             —
           </div>
@@ -189,13 +184,10 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
           }}>
             <div style={{
               padding: '0 10px 10px',
-              fontSize: 'clamp(11px, 1.1vh, 13px)', lineHeight: 1.4,
-              color: theme.text,
+              fontSize: 13, lineHeight: 1.4, color: theme.text,
             }}>
               {col.tasks.map(t => (
-                <div key={t.id} style={{
-                  display: 'flex', gap: 6, marginBottom: 3,
-                }}>
+                <div key={t.id} style={{ display: 'flex', gap: 6, marginBottom: 3 }}>
                   <span style={{ color: theme.subtext, flexShrink: 0 }}>·</span>
                   <span style={{ wordBreak: 'break-word' }}>{t.text}</span>
                 </div>
@@ -205,7 +197,7 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
                   marginTop: col.tasks.length > 0 ? 5 : 0,
                   paddingTop: col.tasks.length > 0 ? 5 : 0,
                   borderTop: col.tasks.length > 0 ? `1px dashed ${theme.border}` : 'none',
-                  fontSize: 'clamp(10px, 0.9vh, 11px)', color: theme.subtext,
+                  fontSize: 11, color: theme.subtext,
                 }}>
                   {col.ideas.length} idea{col.ideas.length === 1 ? '' : 's'}
                 </div>
@@ -217,21 +209,23 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
     )
   }
 
-  const inner = (
+  // The actual portrait dashboard, laid out at PORTRAIT dimensions (1080x1920).
+  // It does not know it's going to be rotated.
+  const dashboard = (
     <div style={{
       width: '100%', height: '100%',
       background: theme.bg, color: theme.text,
       fontFamily: "'DM Sans', sans-serif",
       display: 'grid',
-      // Calendar dominant on top, then 2 family rows, then info bar at bottom
       gridTemplateRows: '5fr 1.4fr 1.4fr auto',
       gap: 10,
       padding: 12,
       overflow: 'hidden',
       transition: 'background 0.5s, color 0.5s',
       minHeight: 0,
+      boxSizing: 'border-box',
     }}>
-      {/* CALENDAR — full week grid at top */}
+      {/* CALENDAR */}
       <div style={{ minHeight: 0, display: 'flex' }}>
         {calendar ? (
           <WeekCalendar
@@ -256,32 +250,20 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
         )}
       </div>
 
-      {/* FAMILY ROW 1 (4 people) */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: 8, minHeight: 0,
-      }}>
-        {topRow.map((col, i) => <FamilyCard key={col.member.id} col={col} idx={i} />)}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, minHeight: 0 }}>
+        {topRow.map(col => <FamilyCard key={col.member.id} col={col} />)}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, minHeight: 0 }}>
+        {bottomRow.map(col => <FamilyCard key={col.member.id} col={col} />)}
       </div>
 
-      {/* FAMILY ROW 2 (4 people) */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: 8, minHeight: 0,
-      }}>
-        {bottomRow.map((col, i) => <FamilyCard key={col.member.id} col={col} idx={i + 4} />)}
-      </div>
-
-      {/* INFO ROW — clock | today | photo | QR */}
+      {/* INFO ROW */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: '1fr 2fr 1.2fr 1fr',
         gap: 8,
-        height: 'clamp(110px, 14vh, 170px)',
+        height: 150,
       }}>
-        {/* Clock */}
         <div style={{
           background: theme.railBg, border: `1px solid ${theme.border}`,
           borderRadius: 10, padding: 10,
@@ -289,54 +271,43 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
           alignItems: 'center', justifyContent: 'center', gap: 2,
         }}>
           <div style={{
-            fontSize: 'clamp(9px, 1vh, 12px)', fontWeight: 600, color: theme.subtext,
+            fontSize: 11, fontWeight: 600, color: theme.subtext,
             textTransform: 'uppercase', letterSpacing: '0.08em',
           }}>{dayName}</div>
           <div style={{
-            fontSize: 'clamp(28px, 4vh, 48px)', fontWeight: 700, lineHeight: 1.0,
+            fontSize: 40, fontWeight: 700, lineHeight: 1.0,
             fontFamily: "'Playfair Display', serif",
             color: theme.text, letterSpacing: '-0.02em',
           }}>{timeStr}</div>
-          <div style={{ fontSize: 'clamp(10px, 1.1vh, 13px)', color: theme.subtext }}>
-            {dateStr}
-          </div>
+          <div style={{ fontSize: 12, color: theme.subtext }}>{dateStr}</div>
         </div>
 
-        {/* Today */}
         <div style={{
           background: theme.railBg, border: `1px solid ${theme.border}`,
           borderRadius: 10, padding: 10,
           display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden',
         }}>
           <div style={{
-            fontSize: 'clamp(9px, 1vh, 11px)', fontWeight: 700, color: theme.subtext,
+            fontSize: 10, fontWeight: 700, color: theme.subtext,
             textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4,
           }}>
             Today
           </div>
           {todayEvents.length === 0 ? (
-            <div style={{
-              fontSize: 'clamp(11px, 1.2vh, 13px)', color: theme.subtext, fontStyle: 'italic',
-            }}>
-              Nothing left
-            </div>
+            <div style={{ fontSize: 12, color: theme.subtext, fontStyle: 'italic' }}>Nothing left</div>
           ) : (
-            <div style={{
-              display: 'flex', flexDirection: 'column', gap: 3,
-              overflow: 'hidden', flex: 1, minHeight: 0,
-            }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, overflow: 'hidden', flex: 1, minHeight: 0 }}>
               {todayEvents.map(e => (
                 <div key={e.id} style={{
                   display: 'flex', alignItems: 'center', gap: 6,
-                  fontSize: 'clamp(11px, 1.2vh, 13px)', lineHeight: 1.25,
+                  fontSize: 12, lineHeight: 1.25,
                 }}>
                   <span style={{
                     width: 6, height: 6, borderRadius: '50%',
                     background: eventColor(e), flexShrink: 0,
                   }} />
                   <span style={{
-                    color: theme.subtext, fontWeight: 600,
-                    minWidth: 'clamp(40px, 4vw, 56px)',
+                    color: theme.subtext, fontWeight: 600, minWidth: 50,
                     fontVariantNumeric: 'tabular-nums',
                   }}>
                     {e.allDay ? 'all day' : formatTime(e.startMinutes)}
@@ -353,7 +324,6 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
           )}
         </div>
 
-        {/* Photo */}
         <div style={{
           background: photos.length === 0 ? theme.muted : (isDark ? '#000' : '#1A1A2E'),
           border: `1px solid ${theme.border}`,
@@ -362,27 +332,19 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
         }}>
           {photos.length === 0 ? (
             <div style={{
-              fontSize: 'clamp(9px, 1vh, 11px)', color: theme.subtext,
-              fontStyle: 'italic', textAlign: 'center', padding: 6,
-            }}>
-              No photos
-            </div>
+              fontSize: 10, color: theme.subtext, fontStyle: 'italic',
+              textAlign: 'center', padding: 6,
+            }}>No photos</div>
           ) : (
-            <img
-              key={photos[photoIdx]}
-              src={photos[photoIdx]}
-              alt=""
+            <img key={photos[photoIdx]} src={photos[photoIdx]} alt=""
               style={{
-                maxWidth: '100%', maxHeight: '100%',
-                objectFit: 'contain',
+                maxWidth: '100%', maxHeight: '100%', objectFit: 'contain',
                 opacity: photoVisible ? 1 : 0,
                 transition: 'opacity 0.6s ease-in-out',
-              }}
-            />
+              }} />
           )}
         </div>
 
-        {/* QR */}
         <div style={{
           background: theme.railBg, border: `1px solid ${theme.border}`,
           borderRadius: 10, padding: 8,
@@ -393,50 +355,49 @@ export default function KitchenDashboardPortrait({ columns, calendar, members, d
             <>
               <img src={qrSrc} alt="Scan to add"
                 style={{
-                  width: 'clamp(54px, 9vh, 90px)',
-                  height: 'clamp(54px, 9vh, 90px)',
+                  width: 80, height: 80,
                   background: '#fff', borderRadius: 4,
                   imageRendering: 'pixelated',
                 }} />
-              <div style={{
-                fontSize: 'clamp(9px, 1vh, 11px)', color: theme.subtext, fontWeight: 500,
-              }}>
+              <div style={{ fontSize: 10, color: theme.subtext, fontWeight: 500 }}>
                 scan to add
               </div>
             </>
           ) : (
-            <div style={{ fontSize: 'clamp(10px, 1vh, 12px)', color: theme.subtext }}>
-              No token
-            </div>
+            <div style={{ fontSize: 11, color: theme.subtext }}>No token</div>
           )}
         </div>
       </div>
     </div>
   )
 
-  // Edge-to-edge on portrait viewport (Fire TV rotated, phone),
-  // 9:16 framed on landscape preview (desktop)
-  if (viewportPortrait) {
-    return <div style={{ height: '100vh', width: '100vw', overflow: 'hidden' }}>{inner}</div>
-  }
+  // Outer rotation wrapper.
+  // Viewport is, e.g., 1920w x 1080h (landscape). We render the dashboard at
+  // 1080 (height of viewport) wide x 1920 (width of viewport) tall — i.e., we
+  // swap the dimensions — then rotate 90° CW so it fills the screen rotated.
+  // After rotation, the dashboard's "top" lines up with the right edge of the
+  // physical screen, which is what you want when the TV is mounted with its
+  // top edge facing the right.
+  const portraitW = vp.h
+  const portraitH = vp.w
 
   return (
     <div style={{
-      height: '100vh', width: '100vw',
-      background: '#0A0A12',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 24, overflow: 'hidden',
+      position: 'fixed',
+      top: 0, left: 0,
+      width: '100vw', height: '100vh',
+      overflow: 'hidden',
+      background: theme.bg,
     }}>
       <div style={{
-        height: '100%',
-        aspectRatio: '9 / 16',
-        maxWidth: '100%',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-        borderRadius: 18,
-        overflow: 'hidden',
-        position: 'relative',
+        position: 'absolute',
+        top: '50%', left: '50%',
+        width: portraitW,
+        height: portraitH,
+        transform: 'translate(-50%, -50%) rotate(90deg)',
+        transformOrigin: 'center center',
       }}>
-        {inner}
+        {dashboard}
       </div>
     </div>
   )
