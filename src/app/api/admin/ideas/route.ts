@@ -5,17 +5,21 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const memberId = req.nextUrl.searchParams.get('member_id')
   const supabase = getSupabaseAdmin()
-  let q = supabase.from('projects').select('id, name, color, member_id').order('name', { ascending: true })
-  if (memberId) q = q.eq('member_id', memberId)
-  const { data, error } = await q
+  const { data, error } = await supabase
+    .from('ideas')
+    .select(`
+      id, text, created_at, member_id,
+      member:family_members(id, display_name, color)
+    `)
+    .order('created_at', { ascending: false })
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ projects: data ?? [] })
+  return NextResponse.json({ ideas: data ?? [] })
 }
 
 export async function POST(req: NextRequest) {
@@ -24,18 +28,21 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { member_id, name, color } = body
-    if (!member_id || !name?.trim()) {
-      return NextResponse.json({ error: 'member_id and name required' }, { status: 400 })
+    const { member_id, text } = body
+    if (!member_id || !text?.trim()) {
+      return NextResponse.json({ error: 'member_id and text required' }, { status: 400 })
     }
     const supabase = getSupabaseAdmin()
     const { data, error } = await supabase
-      .from('projects')
-      .insert({ member_id, name: name.trim(), color: color || null })
-      .select('id, name, color, member_id')
+      .from('ideas')
+      .insert({ member_id, text: text.trim() })
+      .select(`
+        id, text, created_at, member_id,
+        member:family_members(id, display_name, color)
+      `)
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ project: data })
+    return NextResponse.json({ idea: data })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message ?? 'Failed' }, { status: 500 })
   }

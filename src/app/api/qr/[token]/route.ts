@@ -4,17 +4,12 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
-// Returns a PNG image of a QR code that points to a URL appropriate for
-// the device. Kitchen devices → person picker, personal devices → that
-// member's input page. Both placeholder routes for now; just need the
-// QR plumbing wired so each device gets its own real code.
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params
 
-  // Look up device to determine destination URL
   const supabase = getSupabaseAdmin()
   const { data: device } = await supabase
     .from('device_tokens')
@@ -27,7 +22,6 @@ export async function GET(
   if (device?.view_type === 'personal' && device.member_id) {
     target = `${origin}/i/${device.member_id}?d=${token}`
   } else {
-    // Kitchen or unknown → person picker
     target = `${origin}/i/picker?d=${token}`
   }
 
@@ -38,7 +32,8 @@ export async function GET(
       width: 600,
       color: { dark: '#1A1A2E', light: '#FFFFFF' },
     })
-    return new NextResponse(png, {
+    // Convert Buffer → Uint8Array; Buffer isn't valid BodyInit in Next 15 typings
+    return new NextResponse(new Uint8Array(png), {
       status: 200,
       headers: {
         'Content-Type': 'image/png',

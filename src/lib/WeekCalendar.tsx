@@ -14,10 +14,9 @@ type Props = {
   poll?: boolean
   members?: FamilyMemberColor[]
   darkMode?: boolean
-  fillHeight?: boolean   // when true, uses 100% height + percentage event positioning
+  fillHeight?: boolean
 }
 
-const DAY_LABELS_FULL  = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const DAY_LABELS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const NEUTRAL_LIGHT = '#888780'
 const NEUTRAL_DARK  = '#3A3A4A'
@@ -63,27 +62,26 @@ function computeTimeRange(events: DashboardCalendarEvent[]): { startHour: number
   return { startHour, endHour }
 }
 
-// Fluid sizes (clamps with viewport units for 'tv' mode)
 function densityScale(density: Density) {
   if (density === 'tv') return {
     hourLabelSize: 'clamp(11px, 0.85vw, 14px)',
-    dayLabelSize:  'clamp(11px, 0.9vw, 14px)',
-    dayNumSize:    'clamp(22px, 2.2vw, 36px)',
+    dayLabelSize:  'clamp(10px, 0.75vw, 12px)',
+    dayNumSize:    'clamp(13px, 1.05vw, 17px)',
     eventTitleSize:'clamp(12px, 1vw, 16px)',
     eventLocSize:  'clamp(10px, 0.8vw, 12px)',
     allDayBlockSize:'clamp(11px, 0.85vw, 13px)',
-    leftColW:      'clamp(44px, 4vw, 64px)',
+    leftColW:      'clamp(40px, 3.5vw, 56px)',
     chipSize:      'clamp(16px, 1.4vw, 22px)',
     chipFontSize:  'clamp(9px, 0.7vw, 11px)',
     chipGap:       4,
   }
   if (density === 'comfortable') return {
-    hourLabelSize: '11px', dayLabelSize: '11px', dayNumSize: '18px',
+    hourLabelSize: '11px', dayLabelSize: '11px', dayNumSize: '14px',
     eventTitleSize: '12px', eventLocSize: '10px', allDayBlockSize: '11px',
     leftColW: '48px', chipSize: 18, chipFontSize: 10, chipGap: 3,
   }
   return {
-    hourLabelSize: '10px', dayLabelSize: '10px', dayNumSize: '14px',
+    hourLabelSize: '10px', dayLabelSize: '10px', dayNumSize: '12px',
     eventTitleSize: '10px', eventLocSize: '9px', allDayBlockSize: '10px',
     leftColW: '40px', chipSize: 14, chipFontSize: 8, chipGap: 2,
   }
@@ -180,7 +178,6 @@ export default function WeekCalendar({
   const nowInRange = nowMinutes >= startHour * 60 && nowMinutes <= endHour * 60
 
   const s = densityScale(density)
-  const dayLabelLong = density === 'tv'
 
   const memberById = useMemo(() => {
     const m = new Map<string, FamilyMemberColor>()
@@ -191,7 +188,6 @@ export default function WeekCalendar({
   const driverNameOf = (driverId: string | null | undefined) =>
     driverId ? (memberById.get(driverId)?.display_name ?? null) : null
 
-  // Convert event minutes to percentage of grid
   const pctTop = (startMin: number) => ((startMin - startHour * 60) / totalMin) * 100
   const pctHeight = (startMin: number, endMin: number) => ((endMin - startMin) / totalMin) * 100
 
@@ -200,28 +196,13 @@ export default function WeekCalendar({
       width: '100%',
       height: fillHeight ? '100%' : 'auto',
       background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 12,
-      padding: density === 'tv' ? 'clamp(8px, 1vh, 16px)' : 12,
+      padding: density === 'tv' ? 'clamp(8px, 1vh, 14px)' : 12,
       fontFamily: "'DM Sans', sans-serif", color: theme.text,
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
       transition: 'background 0.5s, color 0.5s, border-color 0.5s',
       minHeight: 0, minWidth: 0,
     }}>
-      {/* Top label */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-        marginBottom: 'clamp(6px, 0.8vh, 12px)', paddingLeft: s.leftColW as any,
-        flexShrink: 0,
-      }}>
-        <span style={{ fontSize: s.dayLabelSize as any, color: theme.subtext, fontWeight: 500 }}>
-          This week
-        </span>
-        <span style={{ fontSize: s.eventLocSize as any, color: theme.subtext }}>
-          updated {new Date(syncedAt).toLocaleTimeString('en-US',
-            { hour: 'numeric', minute: '2-digit' })}
-        </span>
-      </div>
-
-      {/* Day headers */}
+      {/* Compact day headers — day label + number on one baseline, no top bar */}
       <div style={{ display: 'grid',
                     gridTemplateColumns: `${s.leftColW} repeat(7, 1fr)`,
                     borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
@@ -230,25 +211,27 @@ export default function WeekCalendar({
           const isToday = d.dayIdx === todayDayIdx
           return (
             <div key={d.dayIdx} style={{
-              padding: 'clamp(4px, 0.6vh, 10px) 6px',
+              padding: 'clamp(4px, 0.5vh, 8px) 6px',
               textAlign: 'center', borderLeft: `1px solid ${theme.gridline}`,
+              display: 'flex', alignItems: 'baseline', justifyContent: 'center',
+              gap: 6,
             }}>
-              <div style={{
+              <span style={{
                 fontSize: s.dayLabelSize as any,
                 color: isToday ? theme.todayAccent : theme.subtext,
                 fontWeight: isToday ? 700 : 500,
                 textTransform: 'uppercase', letterSpacing: '0.05em',
               }}>
-                {dayLabelLong ? DAY_LABELS_FULL[d.dayIdx] : DAY_LABELS_SHORT[d.dayIdx]}
-              </div>
-              <div style={{
+                {DAY_LABELS_SHORT[d.dayIdx]}
+              </span>
+              <span style={{
                 fontSize: s.dayNumSize as any,
-                fontWeight: isToday ? 700 : 500,
+                fontWeight: isToday ? 700 : 600,
                 color: isToday ? theme.todayAccent : theme.text,
-                lineHeight: 1.05,
+                lineHeight: 1.0,
               }}>
                 {d.dateNum}
-              </div>
+              </span>
             </div>
           )
         })}
@@ -294,13 +277,12 @@ export default function WeekCalendar({
         </div>
       )}
 
-      {/* Time grid - fills remaining space, events positioned by % */}
+      {/* Time grid */}
       <div style={{
         position: 'relative', display: 'grid',
         gridTemplateColumns: `${s.leftColW} repeat(7, 1fr)`,
         flex: 1, minHeight: 0,
       }}>
-        {/* Hour labels */}
         <div style={{ position: 'relative' }}>
           {Array.from({ length: endHour - startHour }).map((_, i) => {
             const hour = startHour + i
@@ -325,7 +307,6 @@ export default function WeekCalendar({
               borderLeft: `1px solid ${theme.gridline}`,
               background: dayIdx === todayDayIdx ? theme.todayBg : 'transparent',
             }}>
-              {/* Hour gridlines */}
               {Array.from({ length: endHour - startHour }).map((_, i) => (
                 <div key={i} style={{
                   position: 'absolute',
@@ -397,7 +378,6 @@ export default function WeekCalendar({
           )
         })}
 
-        {/* NOW line */}
         {todayDayIdx >= 0 && nowInRange && (
           <NowLine
             dayIdx={todayDayIdx}
