@@ -826,23 +826,50 @@ export default function AdminSetupClient() {
   }
 
   // ─── Event handlers ─────────────────────────────────────────
+  // For deliberate one-tap user actions (driver pick, transport status,
+  // toggle person involved) we save IMMEDIATELY rather than waiting for
+  // the 300ms debounce. This prevents the "I picked a driver and refreshed
+  // and it's gone" race where the debounce timer hadn't fired yet.
+
+  const saveImmediately = (updatedEvents: CalendarEvent[]) => {
+    if (!weekStartKey) return
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    const snapshot = {
+      events: updatedEvents, dinner, agenda,
+      deadline, deadlineDay, isReady, schoolConfig,
+    }
+    saveState(weekStartKey, snapshot)
+  }
+
   const setTransportStatus = (id: string, status: CalendarEvent['transportStatus']) =>
-    setEvents(ev => ev.map(e => e.id === id
-      ? { ...e, transportStatus: status, driverId: status !== 'needs_driver' ? null : e.driverId }
-      : e))
+    setEvents(ev => {
+      const updated = ev.map(e => e.id === id
+        ? { ...e, transportStatus: status, driverId: status !== 'needs_driver' ? null : e.driverId }
+        : e)
+      saveImmediately(updated)
+      return updated
+    })
 
   const assignDriver = (eventId: string, val: string) =>
-    setEvents(ev => ev.map(e => e.id === eventId ? { ...e, driverId: val || null } : e))
+    setEvents(ev => {
+      const updated = ev.map(e => e.id === eventId ? { ...e, driverId: val || null } : e)
+      saveImmediately(updated)
+      return updated
+    })
 
   const updateCarpoolNote = (eventId: string, note: string) =>
     setEvents(ev => ev.map(e => e.id === eventId ? { ...e, carpoolNote: note } : e))
 
   const toggleMember = (eventId: string, memberId: string) =>
-    setEvents(ev => ev.map(e => {
-      if (e.id !== eventId) return e
-      const has = e.involvedIds.includes(memberId)
-      return { ...e, involvedIds: has ? e.involvedIds.filter(i => i !== memberId) : [...e.involvedIds, memberId] }
-    }))
+    setEvents(ev => {
+      const updated = ev.map(e => {
+        if (e.id !== eventId) return e
+        const has = e.involvedIds.includes(memberId)
+        return { ...e, involvedIds: has ? e.involvedIds.filter(i => i !== memberId) : [...e.involvedIds, memberId] }
+      })
+      saveImmediately(updated)
+      return updated
+    })
 
   const updateDinner = (dayIdx: number, field: keyof DinnerEntry, value: string) =>
     setDinner(d => d.map(s => s.dayIdx === dayIdx ? { ...s, [field]: value } : s))
