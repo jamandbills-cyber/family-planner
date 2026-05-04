@@ -1,58 +1,52 @@
+import { notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { getDashboardForMember, getKitchenData } from '@/lib/dashboard-data'
-import PersonalDashboard from '@/lib/PersonalDashboard'
+import { getKitchenData, getDashboardForMember } from '@/lib/dashboard-data'
 import KitchenDashboard from '@/lib/KitchenDashboard'
+import PersonalDashboard from '@/lib/PersonalDashboard'
 
-// Disable caching so the dashboard always shows fresh data
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-type Params = { params: Promise<{ token: string }> }
-
-export default async function DeviceDashboardPage({ params }: Params) {
+export default async function DevicePage({
+  params,
+}: {
+  params: Promise<{ token: string }>
+}) {
   const { token } = await params
 
   const supabase = getSupabaseAdmin()
   const { data: device } = await supabase
     .from('device_tokens')
-    .select('*')
+    .select('view_type, member_id, label')
     .eq('token', token)
-    .eq('revoked', false)
-    .single()
+    .maybeSingle()
 
-  if (!device) {
-    return (
-      <div style={{ padding: 40, fontFamily: "'DM Sans', sans-serif",
-                    background: '#1A1A2E', color: '#fff', minHeight: '100vh' }}>
-        <h1 style={{ fontSize: 20, marginBottom: 8 }}>Device not authorized</h1>
-        <p style={{ fontSize: 14, color: '#8B8599' }}>
-          This URL is invalid or has been revoked. Ask an admin for a new device URL.
-        </p>
-      </div>
-    )
-  }
-
-  // Touch last_seen_at so admins can see when devices last connected
-  await supabase
-    .from('device_tokens')
-    .update({ last_seen_at: new Date().toISOString() })
-    .eq('token', token)
+  if (!device) notFound()
 
   if (device.view_type === 'kitchen') {
     const data = await getKitchenData()
-    if (!data) return <div style={{ padding: 40 }}>Could not load kitchen data.</div>
-    return <KitchenDashboard {...data} />
+    if (!data) notFound()
+    return (
+      <KitchenDashboard
+        columns={data.columns}
+        calendar={data.calendar}
+        members={data.members}
+        deviceToken={token}
+      />
+    )
   }
 
-  if (device.view_type === 'personal' && device.member_id) {
-    const data = await getDashboardForMember(device.member_id)
-    if (!data) return <div style={{ padding: 40 }}>Could not load member data.</div>
-    return <PersonalDashboard {...data} />
-  }
-
+  // personal
+  if (!device.member_id) notFound()
+  const data = await getDashboardForMember(device.member_id)
+  if (!data) notFound()
   return (
-    <div style={{ padding: 40, fontFamily: "'DM Sans', sans-serif" }}>
-      Unknown view type. Ask an admin to fix this device.
-    </div>
+    <PersonalDashboard
+      member={data.member}
+      projects={data.projects}
+      ideas={data.ideas}
+      calendar={data.calendar}
+      members={data.members}
+    />
   )
 }

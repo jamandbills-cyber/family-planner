@@ -1,10 +1,9 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { DashboardCalendarEvent } from '@/lib/types/calendar'
 
 type Density = 'compact' | 'comfortable' | 'tv'
-
 type FamilyMemberColor = { id: string; display_name: string; color: string | null }
 
 type Props = {
@@ -15,11 +14,11 @@ type Props = {
   poll?: boolean
   members?: FamilyMemberColor[]
   darkMode?: boolean
+  fillHeight?: boolean   // when true, uses 100% height + percentage event positioning
 }
 
 const DAY_LABELS_FULL  = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const DAY_LABELS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
 const NEUTRAL_LIGHT = '#888780'
 const NEUTRAL_DARK  = '#3A3A4A'
 const SCHOOL_BG_LIGHT = '#FEF3C7'
@@ -58,21 +57,41 @@ function computeTimeRange(events: DashboardCalendarEvent[]): { startHour: number
   }
   const startHour = Math.max(0, Math.floor(minMin / 60) - 1)
   const endHour   = Math.min(24, Math.ceil(maxMin / 60) + 1)
-  if (endHour - startHour < 8) {
-    return { startHour: Math.max(0, Math.min(startHour, 8)), endHour: Math.min(24, startHour + 12) }
+  if (endHour - startHour < 12) {
+    return { startHour: Math.max(0, Math.min(startHour, 7)), endHour: Math.min(24, Math.max(endHour, startHour + 12)) }
   }
   return { startHour, endHour }
 }
 
+// Fluid sizes (clamps with viewport units for 'tv' mode)
 function densityScale(density: Density) {
-  if (density === 'tv')         return { hourPx: 64, hourLabelSize: 16, dayLabelSize: 14, dayNumSize: 36, eventTitleSize: 17, eventLocSize: 13, allDayBlockSize: 14, allDayMin: 44, leftColW: 64, chipSize: 24, chipFontSize: 12, chipGap: 4 }
-  if (density === 'comfortable') return { hourPx: 40, hourLabelSize: 11, dayLabelSize: 11, dayNumSize: 18, eventTitleSize: 12, eventLocSize: 10, allDayBlockSize: 11, allDayMin: 30, leftColW: 48, chipSize: 18, chipFontSize: 10, chipGap: 3 }
-  return { hourPx: 28, hourLabelSize: 10, dayLabelSize: 10, dayNumSize: 14, eventTitleSize: 10, eventLocSize: 9, allDayBlockSize: 10, allDayMin: 24, leftColW: 40, chipSize: 14, chipFontSize: 8, chipGap: 2 }
+  if (density === 'tv') return {
+    hourLabelSize: 'clamp(11px, 0.85vw, 14px)',
+    dayLabelSize:  'clamp(11px, 0.9vw, 14px)',
+    dayNumSize:    'clamp(22px, 2.2vw, 36px)',
+    eventTitleSize:'clamp(12px, 1vw, 16px)',
+    eventLocSize:  'clamp(10px, 0.8vw, 12px)',
+    allDayBlockSize:'clamp(11px, 0.85vw, 13px)',
+    leftColW:      'clamp(44px, 4vw, 64px)',
+    chipSize:      'clamp(16px, 1.4vw, 22px)',
+    chipFontSize:  'clamp(9px, 0.7vw, 11px)',
+    chipGap:       4,
+  }
+  if (density === 'comfortable') return {
+    hourLabelSize: '11px', dayLabelSize: '11px', dayNumSize: '18px',
+    eventTitleSize: '12px', eventLocSize: '10px', allDayBlockSize: '11px',
+    leftColW: '48px', chipSize: 18, chipFontSize: 10, chipGap: 3,
+  }
+  return {
+    hourLabelSize: '10px', dayLabelSize: '10px', dayNumSize: '14px',
+    eventTitleSize: '10px', eventLocSize: '9px', allDayBlockSize: '10px',
+    leftColW: '40px', chipSize: 14, chipFontSize: 8, chipGap: 2,
+  }
 }
 
 function ChipRow({ involvedIds, members, chipSize, chipFontSize, chipGap }: {
   involvedIds: string[]; members: FamilyMemberColor[];
-  chipSize: number; chipFontSize: number; chipGap: number;
+  chipSize: number | string; chipFontSize: number | string; chipGap: number;
 }) {
   if (!involvedIds || involvedIds.length === 0) return null
   const involved = involvedIds
@@ -83,12 +102,11 @@ function ChipRow({ involvedIds, members, chipSize, chipFontSize, chipGap }: {
     <div style={{ display: 'flex', gap: chipGap, marginTop: chipGap, flexWrap: 'wrap' }}>
       {involved.map(m => (
         <div key={m.id} title={m.display_name} style={{
-          width: chipSize, height: chipSize, borderRadius: '50%',
+          width: chipSize as any, height: chipSize as any, borderRadius: '50%',
           background: m.color ?? '#888780', color: '#fff',
-          fontSize: chipFontSize, fontWeight: 700,
+          fontSize: chipFontSize as any, fontWeight: 700,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          border: '1.5px solid rgba(255,255,255,0.4)',
-          flexShrink: 0,
+          border: '1.5px solid rgba(255,255,255,0.4)', flexShrink: 0,
         }}>
           {m.display_name[0].toUpperCase()}
         </div>
@@ -100,6 +118,7 @@ function ChipRow({ involvedIds, members, chipSize, chipFontSize, chipGap }: {
 export default function WeekCalendar({
   events: initialEvents, syncedAt: initialSyncedAt, weekStart,
   density = 'comfortable', poll = true, members = [], darkMode,
+  fillHeight = false,
 }: Props) {
   const [events,   setEvents]   = useState(initialEvents)
   const [syncedAt, setSyncedAt] = useState(initialSyncedAt)
@@ -138,7 +157,7 @@ export default function WeekCalendar({
   }
 
   const { startHour, endHour } = useMemo(() => computeTimeRange(events), [events])
-  const hours = endHour - startHour
+  const totalMin = (endHour - startHour) * 60
   const allDayEvents = events.filter(e => e.allDay)
   const timedEvents  = events.filter(e => !e.allDay)
 
@@ -161,9 +180,6 @@ export default function WeekCalendar({
   const nowInRange = nowMinutes >= startHour * 60 && nowMinutes <= endHour * 60
 
   const s = densityScale(density)
-  const ROW_HEIGHT = s.hourPx
-  const TIME_COL_W = s.leftColW
-  const ALL_DAY_H  = allDayEvents.length > 0 ? s.allDayMin : 0
   const dayLabelLong = density === 'tv'
 
   const memberById = useMemo(() => {
@@ -175,22 +191,31 @@ export default function WeekCalendar({
   const driverNameOf = (driverId: string | null | undefined) =>
     driverId ? (memberById.get(driverId)?.display_name ?? null) : null
 
+  // Convert event minutes to percentage of grid
+  const pctTop = (startMin: number) => ((startMin - startHour * 60) / totalMin) * 100
+  const pctHeight = (startMin: number, endMin: number) => ((endMin - startMin) / totalMin) * 100
+
   return (
     <div style={{
+      width: '100%',
+      height: fillHeight ? '100%' : 'auto',
       background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 12,
-      padding: density === 'tv' ? 16 : 12,
+      padding: density === 'tv' ? 'clamp(8px, 1vh, 16px)' : 12,
       fontFamily: "'DM Sans', sans-serif", color: theme.text,
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
       transition: 'background 0.5s, color 0.5s, border-color 0.5s',
+      minHeight: 0, minWidth: 0,
     }}>
+      {/* Top label */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-        marginBottom: density === 'tv' ? 12 : 8, paddingLeft: TIME_COL_W,
+        marginBottom: 'clamp(6px, 0.8vh, 12px)', paddingLeft: s.leftColW as any,
+        flexShrink: 0,
       }}>
-        <span style={{ fontSize: density === 'tv' ? 16 : 12, color: theme.subtext, fontWeight: 500 }}>
+        <span style={{ fontSize: s.dayLabelSize as any, color: theme.subtext, fontWeight: 500 }}>
           This week
         </span>
-        <span style={{ fontSize: density === 'tv' ? 12 : 10, color: theme.subtext }}>
+        <span style={{ fontSize: s.eventLocSize as any, color: theme.subtext }}>
           updated {new Date(syncedAt).toLocaleTimeString('en-US',
             { hour: 'numeric', minute: '2-digit' })}
         </span>
@@ -198,18 +223,18 @@ export default function WeekCalendar({
 
       {/* Day headers */}
       <div style={{ display: 'grid',
-                    gridTemplateColumns: `${TIME_COL_W}px repeat(7, 1fr)`,
-                    borderBottom: `1px solid ${theme.border}` }}>
+                    gridTemplateColumns: `${s.leftColW} repeat(7, 1fr)`,
+                    borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
         <div />
         {weekDates.map(d => {
           const isToday = d.dayIdx === todayDayIdx
           return (
             <div key={d.dayIdx} style={{
-              padding: density === 'tv' ? '10px 6px' : '8px 4px 6px',
+              padding: 'clamp(4px, 0.6vh, 10px) 6px',
               textAlign: 'center', borderLeft: `1px solid ${theme.gridline}`,
             }}>
               <div style={{
-                fontSize: s.dayLabelSize,
+                fontSize: s.dayLabelSize as any,
                 color: isToday ? theme.todayAccent : theme.subtext,
                 fontWeight: isToday ? 700 : 500,
                 textTransform: 'uppercase', letterSpacing: '0.05em',
@@ -217,10 +242,10 @@ export default function WeekCalendar({
                 {dayLabelLong ? DAY_LABELS_FULL[d.dayIdx] : DAY_LABELS_SHORT[d.dayIdx]}
               </div>
               <div style={{
-                fontSize: isToday ? s.dayNumSize + 4 : s.dayNumSize,
+                fontSize: s.dayNumSize as any,
                 fontWeight: isToday ? 700 : 500,
                 color: isToday ? theme.todayAccent : theme.text,
-                lineHeight: 1.05, marginTop: 2,
+                lineHeight: 1.05,
               }}>
                 {d.dateNum}
               </div>
@@ -233,12 +258,12 @@ export default function WeekCalendar({
       {allDayEvents.length > 0 && (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: `${TIME_COL_W}px repeat(7, 1fr)`,
+          gridTemplateColumns: `${s.leftColW} repeat(7, 1fr)`,
           borderBottom: `1px solid ${theme.border}`,
-          minHeight: ALL_DAY_H, padding: '4px 0',
+          padding: '4px 0', flexShrink: 0,
           background: isDark ? '#1A1A26' : '#F7F4EF',
         }}>
-          <div style={{ fontSize: density === 'tv' ? 12 : 9, color: theme.subtext,
+          <div style={{ fontSize: s.eventLocSize as any, color: theme.subtext,
                         textAlign: 'right', paddingRight: 6, paddingTop: 4 }}>
             all-day
           </div>
@@ -255,11 +280,9 @@ export default function WeekCalendar({
                   return (
                     <div key={e.id} title={e.title} style={{
                       background: c.bg, color: c.fg,
-                      fontSize: s.allDayBlockSize, fontWeight: 500,
-                      padding: density === 'tv' ? '4px 10px' : '1px 6px',
-                      borderRadius: 4,
-                      lineHeight: 1.4,
-                      wordBreak: 'break-word',
+                      fontSize: s.allDayBlockSize as any, fontWeight: 500,
+                      padding: '3px 8px', borderRadius: 4,
+                      lineHeight: 1.4, wordBreak: 'break-word',
                     }}>
                       {e.title}
                     </div>
@@ -271,20 +294,24 @@ export default function WeekCalendar({
         </div>
       )}
 
-      {/* Time grid - blocks are absolutely positioned but grow tall to fit content */}
-      <div style={{ position: 'relative', display: 'grid',
-                    gridTemplateColumns: `${TIME_COL_W}px repeat(7, 1fr)`,
-                    height: hours * ROW_HEIGHT }}>
+      {/* Time grid - fills remaining space, events positioned by % */}
+      <div style={{
+        position: 'relative', display: 'grid',
+        gridTemplateColumns: `${s.leftColW} repeat(7, 1fr)`,
+        flex: 1, minHeight: 0,
+      }}>
+        {/* Hour labels */}
         <div style={{ position: 'relative' }}>
-          {Array.from({ length: hours }).map((_, i) => {
+          {Array.from({ length: endHour - startHour }).map((_, i) => {
             const hour = startHour + i
             const label = hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM`
                           : hour === 12 ? '12 PM' : `${hour - 12} PM`
             return (
               <div key={i} style={{
-                position: 'absolute', top: i * ROW_HEIGHT - (s.hourLabelSize / 2),
-                right: 8, fontSize: s.hourLabelSize, color: theme.subtext,
-                fontWeight: 500,
+                position: 'absolute',
+                top: `${(i / (endHour - startHour)) * 100}%`,
+                right: 8, fontSize: s.hourLabelSize as any, color: theme.subtext,
+                fontWeight: 500, transform: 'translateY(-50%)',
               }}>{label}</div>
             )
           })}
@@ -298,21 +325,20 @@ export default function WeekCalendar({
               borderLeft: `1px solid ${theme.gridline}`,
               background: dayIdx === todayDayIdx ? theme.todayBg : 'transparent',
             }}>
-              {Array.from({ length: hours }).map((_, i) => (
+              {/* Hour gridlines */}
+              {Array.from({ length: endHour - startHour }).map((_, i) => (
                 <div key={i} style={{
-                  position: 'absolute', top: i * ROW_HEIGHT, left: 0, right: 0,
+                  position: 'absolute',
+                  top: `${(i / (endHour - startHour)) * 100}%`,
+                  left: 0, right: 0,
                   height: 1, background: theme.gridline,
                 }} />
               ))}
 
               {dayEvts.map(e => {
                 const c = pickEventColor(e, members, isDark)
-                const top = ((e.startMinutes - startHour * 60) / 60) * ROW_HEIGHT
-                const durationMinutes = e.endMinutes - e.startMinutes
-                const naturalHeight = (durationMinutes / 60) * ROW_HEIGHT
-                // Minimum height to fit the title + chips comfortably
-                const minHeight = density === 'tv' ? 70 : density === 'comfortable' ? 48 : 32
-                const height = Math.max(minHeight, naturalHeight)
+                const top = pctTop(e.startMinutes)
+                const heightPct = Math.max(pctHeight(e.startMinutes, e.endMinutes), 5)
                 const driverName = driverNameOf(e.driverId)
                 const needsDriver = e.transportStatus === 'needs_driver' && !e.driverId
 
@@ -320,38 +346,39 @@ export default function WeekCalendar({
                   <div key={e.id}
                     title={`${e.title}${e.location ? ' · ' + e.location : ''}${driverName ? ' · driver: ' + driverName : ''}`}
                     style={{
-                      position: 'absolute', top, left: 3, right: 3,
-                      minHeight: height, background: c.bg, color: c.fg,
+                      position: 'absolute',
+                      top: `${top}%`,
+                      height: `${heightPct}%`,
+                      left: 3, right: 3,
+                      background: c.bg, color: c.fg,
                       borderRadius: 5,
-                      padding: density === 'tv' ? '8px 12px' : '4px 7px',
-                      fontSize: s.eventTitleSize, lineHeight: 1.3,
+                      padding: 'clamp(4px, 0.5vh, 10px) clamp(6px, 0.6vw, 12px)',
+                      fontSize: s.eventTitleSize as any, lineHeight: 1.25,
                       boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
                       borderLeft: needsDriver ? `4px solid ${theme.nowLine}` : undefined,
                       display: 'flex', flexDirection: 'column', gap: 2,
+                      overflow: 'hidden',
                       zIndex: 1,
                     }}>
                     <div style={{
                       fontWeight: 600,
-                      wordBreak: 'break-word',
-                      whiteSpace: 'normal',
+                      wordBreak: 'break-word', whiteSpace: 'normal',
                     }}>
                       {e.title}
                     </div>
                     {e.location && (
-                      <div style={{ fontSize: s.eventLocSize, opacity: 0.85,
+                      <div style={{ fontSize: s.eventLocSize as any, opacity: 0.85,
                                     wordBreak: 'break-word' }}>
                         {e.location}
                       </div>
                     )}
                     {driverName && (
-                      <div style={{ fontSize: s.eventLocSize, opacity: 0.95,
-                                    fontWeight: 500 }}>
+                      <div style={{ fontSize: s.eventLocSize as any, opacity: 0.95, fontWeight: 500 }}>
                         🚗 {driverName}
                       </div>
                     )}
                     {needsDriver && (
-                      <div style={{ fontSize: s.eventLocSize, opacity: 0.95,
-                                    fontWeight: 600 }}>
+                      <div style={{ fontSize: s.eventLocSize as any, opacity: 0.95, fontWeight: 600 }}>
                         ⚠ needs driver
                       </div>
                     )}
@@ -359,8 +386,8 @@ export default function WeekCalendar({
                       <ChipRow
                         involvedIds={e.involvedIds}
                         members={members}
-                        chipSize={s.chipSize}
-                        chipFontSize={s.chipFontSize}
+                        chipSize={s.chipSize as any}
+                        chipFontSize={s.chipFontSize as any}
                         chipGap={s.chipGap} />
                     )}
                   </div>
@@ -370,20 +397,23 @@ export default function WeekCalendar({
           )
         })}
 
+        {/* NOW line */}
         {todayDayIdx >= 0 && nowInRange && (
           <NowLine
             dayIdx={todayDayIdx}
-            top={((nowMinutes - startHour * 60) / 60) * ROW_HEIGHT}
-            timeColWidth={TIME_COL_W}
+            topPct={((nowMinutes - startHour * 60) / totalMin) * 100}
+            timeColWidth={s.leftColW as any}
             color={theme.nowLine}
           />
         )}
       </div>
 
       {events.length === 0 && (
-        <div style={{ textAlign: 'center', color: theme.subtext,
-                      fontSize: density === 'tv' ? 18 : 13,
-                      padding: '30px 0', fontStyle: 'italic' }}>
+        <div style={{
+          textAlign: 'center', color: theme.subtext,
+          fontSize: 'clamp(13px, 1vw, 18px)',
+          padding: '20px 0', fontStyle: 'italic',
+        }}>
           No events this week
         </div>
       )}
@@ -391,12 +421,13 @@ export default function WeekCalendar({
   )
 }
 
-function NowLine({ dayIdx, top, timeColWidth, color }: {
-  dayIdx: number; top: number; timeColWidth: number; color: string;
+function NowLine({ dayIdx, topPct, timeColWidth, color }: {
+  dayIdx: number; topPct: number; timeColWidth: string; color: string;
 }) {
   return (
     <div style={{
-      position: 'absolute', top, left: timeColWidth, right: 0,
+      position: 'absolute', top: `${topPct}%`,
+      left: timeColWidth, right: 0,
       height: 0, pointerEvents: 'none', zIndex: 2,
     }}>
       <div style={{
