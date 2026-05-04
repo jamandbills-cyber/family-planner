@@ -9,10 +9,11 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const memberId = req.nextUrl.searchParams.get('member_id')
+  const ownerId = req.nextUrl.searchParams.get('owner_id')
+                ?? req.nextUrl.searchParams.get('member_id')
   const supabase = getSupabaseAdmin()
-  let q = supabase.from('projects').select('id, name, color, member_id').order('name', { ascending: true })
-  if (memberId) q = q.eq('member_id', memberId)
+  let q = supabase.from('projects').select('id, name, color, owner_id, status, is_shared').order('name', { ascending: true })
+  if (ownerId) q = q.eq('owner_id', ownerId)
   const { data, error } = await q
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ projects: data ?? [] })
@@ -24,15 +25,20 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { member_id, name, color } = body
-    if (!member_id || !name?.trim()) {
-      return NextResponse.json({ error: 'member_id and name required' }, { status: 400 })
+    const owner_id = body.owner_id ?? body.member_id
+    const name = (body.name ?? '').toString().trim()
+    const color = body.color ?? null
+    if (!owner_id || !name) {
+      return NextResponse.json({ error: 'owner_id and name required' }, { status: 400 })
     }
+    const insert: any = { owner_id, name }
+    if (color !== null) insert.color = color
+
     const supabase = getSupabaseAdmin()
     const { data, error } = await supabase
       .from('projects')
-      .insert({ member_id, name: name.trim(), color: color || null })
-      .select('id, name, color, member_id')
+      .insert(insert)
+      .select('id, name, color, owner_id, status, is_shared')
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ project: data })

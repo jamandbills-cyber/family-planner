@@ -1,19 +1,19 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Trash2, Loader2, Check } from 'lucide-react'
+import { Plus, Trash2, Loader2 } from 'lucide-react'
 
 type Member = { id: string; display_name: string; color: string | null }
-type Project = { id: string; name: string; color: string | null; member_id: string }
+type Project = { id: string; name: string; color: string | null; owner_id: string }
 type Task = {
   id: string
   text: string
   due_date: string | null
   completed_at: string | null
   created_at: string
-  member_id: string
+  owner_id: string
   project_id: string | null
-  member: Member | null
+  owner: Member | null
   project: { id: string; name: string; color: string | null } | null
 }
 
@@ -25,11 +25,16 @@ export default function TasksClient() {
   const [error, setError]       = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
 
-  // Form state
-  const [member_id, setMemberId]   = useState('')
+  const [owner_id, setOwnerId]     = useState('')
   const [text, setText]            = useState('')
   const [due_date, setDueDate]     = useState('')
   const [project_id, setProjectId] = useState('')
+
+  const safeJson = async (res: Response) => {
+    const text = await res.text()
+    if (!text) return {}
+    try { return JSON.parse(text) } catch { return { error: text } }
+  }
 
   const load = async () => {
     setLoading(true)
@@ -40,16 +45,15 @@ export default function TasksClient() {
         fetch('/api/admin/projects'),
         fetch('/api/admin/tasks'),
       ])
-      const mData = await mRes.json()
-      const pData = await pRes.json()
-      const tData = await tRes.json()
+      const mData = await safeJson(mRes)
+      const pData = await safeJson(pRes)
+      const tData = await safeJson(tRes)
       if (!tRes.ok) throw new Error(tData.error ?? 'Failed to load')
-      const mems = (mData.members ?? []).map((m: any) => ({
+      setMembers((mData.members ?? []).map((m: any) => ({
         id: m.id,
         display_name: m.display_name ?? m.name ?? m.id,
         color: m.color ?? null,
-      }))
-      setMembers(mems)
+      })))
       setProjects(pData.projects ?? [])
       setTasks(tData.tasks ?? [])
     } catch (e: any) {
@@ -62,7 +66,7 @@ export default function TasksClient() {
   useEffect(() => { load() }, [])
 
   const create = async () => {
-    if (!member_id || !text.trim()) return
+    if (!owner_id || !text.trim()) return
     setCreating(true)
     setError(null)
     try {
@@ -70,19 +74,19 @@ export default function TasksClient() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          member_id,
+          owner_id,
           text: text.trim(),
           due_date: due_date || null,
           project_id: project_id || null,
         }),
       })
-      const data = await res.json()
+      const data = await safeJson(res)
       if (!res.ok) throw new Error(data.error ?? 'Failed to create')
       setTasks(t => [data.task, ...t])
       setText(''); setDueDate(''); setProjectId('')
-      // Refresh projects in case a new "Personal" was auto-created
+      // Refresh projects in case Personal was auto-created
       const pRes = await fetch('/api/admin/projects')
-      const pData = await pRes.json()
+      const pData = await safeJson(pRes)
       setProjects(pData.projects ?? [])
     } catch (e: any) {
       setError(e.message)
@@ -96,7 +100,7 @@ export default function TasksClient() {
     try {
       const res = await fetch(`/api/admin/tasks/${id}`, { method: 'DELETE' })
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
+        const data = await safeJson(res)
         throw new Error(data.error ?? 'Failed')
       }
       setTasks(ts => ts.filter(t => t.id !== id))
@@ -119,20 +123,18 @@ export default function TasksClient() {
     }
   }
 
-  // Filter projects by selected member for the dropdown
   const memberProjects = useMemo(
-    () => projects.filter(p => p.member_id === member_id),
-    [projects, member_id]
+    () => projects.filter(p => p.owner_id === owner_id),
+    [projects, owner_id]
   )
 
-  // Group tasks by member for the list
   const grouped = useMemo(() => {
     const map = new Map<string, Task[]>()
     members.forEach(m => map.set(m.id, []))
     tasks.forEach(t => {
-      const arr = map.get(t.member_id) ?? []
+      const arr = map.get(t.owner_id) ?? []
       arr.push(t)
-      map.set(t.member_id, arr)
+      map.set(t.owner_id, arr)
     })
     return members
       .map(m => ({ member: m, tasks: map.get(m.id) ?? [] }))
@@ -162,7 +164,6 @@ export default function TasksClient() {
           </p>
         </div>
 
-        {/* Add form */}
         <div style={{
           background: '#fff', border: '1px solid #E8E3DB', borderRadius: 12,
           padding: 20, marginBottom: 20,
@@ -172,8 +173,8 @@ export default function TasksClient() {
               <label style={{ fontSize: 12, fontWeight: 600, color: '#8B8599', display: 'block', marginBottom: 4 }}>
                 For whom *
               </label>
-              <select value={member_id}
-                onChange={e => { setMemberId(e.target.value); setProjectId('') }}
+              <select value={owner_id}
+                onChange={e => { setOwnerId(e.target.value); setProjectId('') }}
                 style={{
                   width: '100%', border: '1.5px solid #E2DDD6', borderRadius: 7,
                   padding: '9px 10px', fontSize: 14, fontFamily: 'inherit', background: '#fff',
@@ -190,12 +191,12 @@ export default function TasksClient() {
               </label>
               <select value={project_id}
                 onChange={e => setProjectId(e.target.value)}
-                disabled={!member_id}
+                disabled={!owner_id}
                 style={{
                   width: '100%', border: '1.5px solid #E2DDD6', borderRadius: 7,
                   padding: '9px 10px', fontSize: 14, fontFamily: 'inherit',
-                  background: !member_id ? '#FAFAF7' : '#fff',
-                  opacity: !member_id ? 0.5 : 1,
+                  background: !owner_id ? '#FAFAF7' : '#fff',
+                  opacity: !owner_id ? 0.5 : 1,
                 }}>
                 <option value="">Personal (default)</option>
                 {memberProjects.map(p => (
@@ -210,7 +211,7 @@ export default function TasksClient() {
             </label>
             <input value={text}
               onChange={e => setText(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && member_id && text.trim()) create() }}
+              onKeyDown={e => { if (e.key === 'Enter' && owner_id && text.trim()) create() }}
               placeholder="e.g. Pick up dry cleaning"
               style={{
                 width: '100%', border: '1.5px solid #E2DDD6', borderRadius: 7,
@@ -230,13 +231,13 @@ export default function TasksClient() {
                 }} />
             </div>
             <button onClick={create}
-              disabled={creating || !member_id || !text.trim()}
+              disabled={creating || !owner_id || !text.trim()}
               style={{
                 background: '#C4522A', color: '#fff', border: 'none',
                 borderRadius: 7, padding: '10px 20px', fontSize: 14, fontWeight: 600,
                 cursor: 'pointer', fontFamily: 'inherit',
                 display: 'inline-flex', alignItems: 'center', gap: 6,
-                opacity: (creating || !member_id || !text.trim()) ? 0.5 : 1,
+                opacity: (creating || !owner_id || !text.trim()) ? 0.5 : 1,
                 whiteSpace: 'nowrap',
               }}>
               {creating
@@ -249,7 +250,6 @@ export default function TasksClient() {
           )}
         </div>
 
-        {/* List */}
         {loading ? (
           <div style={{ textAlign: 'center', padding: 40, color: '#8B8599' }}>
             <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />

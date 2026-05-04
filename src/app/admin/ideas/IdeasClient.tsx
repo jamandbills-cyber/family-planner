@@ -8,8 +8,8 @@ type Idea = {
   id: string
   text: string
   created_at: string
-  member_id: string
-  member: Member | null
+  owner_id: string
+  owner: Member | null
 }
 
 export default function IdeasClient() {
@@ -19,8 +19,14 @@ export default function IdeasClient() {
   const [error, setError]     = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
 
-  const [member_id, setMemberId] = useState('')
-  const [text, setText]          = useState('')
+  const [owner_id, setOwnerId] = useState('')
+  const [text, setText]        = useState('')
+
+  const safeJson = async (res: Response) => {
+    const t = await res.text()
+    if (!t) return {}
+    try { return JSON.parse(t) } catch { return { error: t } }
+  }
 
   const load = async () => {
     setLoading(true)
@@ -30,8 +36,8 @@ export default function IdeasClient() {
         fetch('/api/admin/family'),
         fetch('/api/admin/ideas'),
       ])
-      const mData = await mRes.json()
-      const iData = await iRes.json()
+      const mData = await safeJson(mRes)
+      const iData = await safeJson(iRes)
       if (!iRes.ok) throw new Error(iData.error ?? 'Failed to load')
       setMembers((mData.members ?? []).map((m: any) => ({
         id: m.id,
@@ -49,16 +55,16 @@ export default function IdeasClient() {
   useEffect(() => { load() }, [])
 
   const create = async () => {
-    if (!member_id || !text.trim()) return
+    if (!owner_id || !text.trim()) return
     setCreating(true)
     setError(null)
     try {
       const res = await fetch('/api/admin/ideas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ member_id, text: text.trim() }),
+        body: JSON.stringify({ owner_id, text: text.trim() }),
       })
-      const data = await res.json()
+      const data = await safeJson(res)
       if (!res.ok) throw new Error(data.error ?? 'Failed')
       setIdeas(i => [data.idea, ...i])
       setText('')
@@ -74,7 +80,7 @@ export default function IdeasClient() {
     try {
       const res = await fetch(`/api/admin/ideas/${id}`, { method: 'DELETE' })
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
+        const data = await safeJson(res)
         throw new Error(data.error ?? 'Failed')
       }
       setIdeas(is => is.filter(i => i.id !== id))
@@ -87,9 +93,9 @@ export default function IdeasClient() {
     const map = new Map<string, Idea[]>()
     members.forEach(m => map.set(m.id, []))
     ideas.forEach(i => {
-      const arr = map.get(i.member_id) ?? []
+      const arr = map.get(i.owner_id) ?? []
       arr.push(i)
-      map.set(i.member_id, arr)
+      map.set(i.owner_id, arr)
     })
     return members
       .map(m => ({ member: m, ideas: map.get(m.id) ?? [] }))
@@ -121,8 +127,8 @@ export default function IdeasClient() {
               <label style={{ fontSize: 12, fontWeight: 600, color: '#8B8599', display: 'block', marginBottom: 4 }}>
                 For whom *
               </label>
-              <select value={member_id}
-                onChange={e => setMemberId(e.target.value)}
+              <select value={owner_id}
+                onChange={e => setOwnerId(e.target.value)}
                 style={{
                   width: '100%', border: '1.5px solid #E2DDD6', borderRadius: 7,
                   padding: '9px 10px', fontSize: 14, fontFamily: 'inherit', background: '#fff',
@@ -139,7 +145,7 @@ export default function IdeasClient() {
               </label>
               <input value={text}
                 onChange={e => setText(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && member_id && text.trim()) create() }}
+                onKeyDown={e => { if (e.key === 'Enter' && owner_id && text.trim()) create() }}
                 placeholder="e.g. Look into ski lessons next winter"
                 style={{
                   width: '100%', border: '1.5px solid #E2DDD6', borderRadius: 7,
@@ -147,13 +153,13 @@ export default function IdeasClient() {
                 }} />
             </div>
             <button onClick={create}
-              disabled={creating || !member_id || !text.trim()}
+              disabled={creating || !owner_id || !text.trim()}
               style={{
                 background: '#C4522A', color: '#fff', border: 'none',
                 borderRadius: 7, padding: '10px 20px', fontSize: 14, fontWeight: 600,
                 cursor: 'pointer', fontFamily: 'inherit',
                 display: 'inline-flex', alignItems: 'center', gap: 6,
-                opacity: (creating || !member_id || !text.trim()) ? 0.5 : 1,
+                opacity: (creating || !owner_id || !text.trim()) ? 0.5 : 1,
                 whiteSpace: 'nowrap',
               }}>
               {creating

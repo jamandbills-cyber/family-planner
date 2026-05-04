@@ -46,8 +46,6 @@ function pickEventColor(event: DashboardCalendarEvent,
   return { bg: isDark ? NEUTRAL_DARK : NEUTRAL_LIGHT, fg: '#fff' }
 }
 
-// Tight time range: floor of earliest hour to ceiling of latest hour.
-// No buffer above/below, no minimum span.
 function computeTimeRange(events: DashboardCalendarEvent[]): { startHour: number; endHour: number } {
   const timed = events.filter(e => !e.allDay)
   if (timed.length === 0) return { startHour: 8, endHour: 18 }
@@ -73,21 +71,22 @@ function densityScale(density: Density) {
     chipSize:      'clamp(14px, 1.2vw, 18px)',
     chipFontSize:  'clamp(8px, 0.65vw, 10px)',
     chipGap:       3,
+    minPxPerHour:  40,
   }
   if (density === 'comfortable') return {
     hourLabelSize: '11px', dayLabelSize: '11px', dayNumSize: '14px',
     eventLocSize: '10px', allDayBlockSize: '11px',
     leftColW: '48px', chipSize: 18, chipFontSize: 10, chipGap: 3,
+    minPxPerHour: 56,
   }
   return {
     hourLabelSize: '10px', dayLabelSize: '10px', dayNumSize: '12px',
     eventLocSize: '9px', allDayBlockSize: '10px',
     leftColW: '40px', chipSize: 14, chipFontSize: 8, chipGap: 2,
+    minPxPerHour: 40,
   }
 }
 
-// Font + padding scale based on the event block's height as a percentage
-// of the visible time range. Tight content for short events.
 function eventBlockStyle(heightPct: number) {
   if (heightPct >= 12) return {
     titleSize: 'clamp(13px, 1.05vw, 17px)',
@@ -117,7 +116,6 @@ function eventBlockStyle(heightPct: number) {
     showLocation: false,
     showChips: false,
   }
-  // Very small block — just the title, tiny font
   return {
     titleSize: 'clamp(9px, 0.7vw, 11px)',
     locSize:   'clamp(8px, 0.65vw, 10px)',
@@ -153,8 +151,6 @@ function ChipRow({ involvedIds, members, chipSize, chipFontSize, chipGap }: {
   )
 }
 
-// Strip "(Boston, Hailee, Sadie)" and similar parentheticals from school
-// event titles for cleaner display while preserving the underlying data.
 function displayTitle(e: DashboardCalendarEvent): string {
   if (e.isSchoolEvent) {
     return e.title.replace(/\s*\([^)]*\)\s*/g, '').trim() || e.title
@@ -240,6 +236,10 @@ export default function WeekCalendar({
   const pctTop = (startMin: number) => ((startMin - startHour * 60) / totalMin) * 100
   const pctHeight = (startMin: number, endMin: number) => ((endMin - startMin) / totalMin) * 100
 
+  // Time grid intrinsic minimum height — guarantees visibility when parent
+  // doesn't constrain height (e.g., personal dashboard layout).
+  const minGridHeight = (endHour - startHour) * s.minPxPerHour
+
   return (
     <div style={{
       width: '100%',
@@ -251,7 +251,6 @@ export default function WeekCalendar({
       transition: 'background 0.5s, color 0.5s, border-color 0.5s',
       minHeight: 0, minWidth: 0,
     }}>
-      {/* Compact day headers */}
       <div style={{ display: 'grid',
                     gridTemplateColumns: `${s.leftColW} repeat(7, 1fr)`,
                     borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
@@ -286,7 +285,6 @@ export default function WeekCalendar({
         })}
       </div>
 
-      {/* All-day strip */}
       {allDayEvents.length > 0 && (
         <div style={{
           display: 'grid',
@@ -326,11 +324,11 @@ export default function WeekCalendar({
         </div>
       )}
 
-      {/* Time grid */}
+      {/* Time grid — minHeight guarantees usable size when parent doesn't constrain */}
       <div style={{
         position: 'relative', display: 'grid',
         gridTemplateColumns: `${s.leftColW} repeat(7, 1fr)`,
-        flex: 1, minHeight: 0,
+        flex: 1, minHeight: minGridHeight,
       }}>
         <div style={{ position: 'relative' }}>
           {Array.from({ length: endHour - startHour }).map((_, i) => {

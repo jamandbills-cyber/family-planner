@@ -2,11 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateDeviceToken } from '@/lib/device-token'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
-// PATCH /api/i/tasks/[id]?d={token}
-// Body can include:
-//   - completed: true → mark complete
-//   - text: string → edit text
-//   - move: 'up' | 'down' → swap position with neighbor
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -21,11 +16,10 @@ export async function PATCH(
     const body = await req.json()
     const supabase = getSupabaseAdmin()
 
-    // Move up/down — swap positions with the adjacent task
     if (body.move === 'up' || body.move === 'down') {
       const { data: self } = await supabase
         .from('tasks')
-        .select('id, member_id, position')
+        .select('id, owner_id, position')
         .eq('id', id)
         .maybeSingle()
       if (!self) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
@@ -36,7 +30,7 @@ export async function PATCH(
       const query = supabase
         .from('tasks')
         .select('id, position')
-        .eq('member_id', self.member_id)
+        .eq('owner_id', self.owner_id)
         .is('completed_at', null)
         .order('position', { ascending: direction === 'asc', nullsFirst: false })
         .limit(1)
@@ -47,23 +41,20 @@ export async function PATCH(
 
       const neighbor = neighborArr?.[0]
       if (!neighbor) {
-        // Already at top/bottom — no-op
         return NextResponse.json({ task: self, moved: false })
       }
 
-      // Swap
       await supabase.from('tasks').update({ position: self.position }).eq('id', neighbor.id)
       const { data: updated, error } = await supabase
         .from('tasks')
         .update({ position: neighbor.position })
         .eq('id', id)
-        .select('id, text, due_date, completed_at, created_at, position, member_id, project_id')
+        .select('id, text, due_date, completed_at, created_at, position, owner_id, creator_id, project_id')
         .single()
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       return NextResponse.json({ task: updated, moved: true })
     }
 
-    // Regular field updates
     const update: Record<string, any> = {}
     if (body.text !== undefined)      update.text = body.text
     if (body.due_date !== undefined)  update.due_date = body.due_date || null
@@ -74,7 +65,7 @@ export async function PATCH(
       .from('tasks')
       .update(update)
       .eq('id', id)
-      .select('id, text, due_date, completed_at, created_at, position, member_id, project_id')
+      .select('id, text, due_date, completed_at, created_at, position, owner_id, creator_id, project_id')
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ task: data })

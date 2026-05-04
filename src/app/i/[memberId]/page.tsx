@@ -10,7 +10,7 @@ type Task = {
   due_date: string | null
   completed_at: string | null
   position: number | null
-  member_id: string
+  owner_id: string
 }
 type Member = { id: string; display_name: string; color: string | null }
 
@@ -43,7 +43,7 @@ export default function MemberInputPage() {
     try {
       const [mRes, tRes] = await Promise.all([
         fetch(`/api/i/family?d=${encodeURIComponent(token)}`),
-        fetch(`/api/i/tasks?d=${encodeURIComponent(token)}&member_id=${encodeURIComponent(memberId)}`),
+        fetch(`/api/i/tasks?d=${encodeURIComponent(token)}&owner_id=${encodeURIComponent(memberId)}`),
       ])
       const mData = await safeJson(mRes)
       const tData = await safeJson(tRes)
@@ -69,7 +69,7 @@ export default function MemberInputPage() {
       const res = await fetch(`/api/i/tasks${tokenParam}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ member_id: memberId, text }),
+        body: JSON.stringify({ owner_id: memberId, text }),
       })
       const data = await safeJson(res)
       if (!res.ok) throw new Error(data.error ?? 'Failed')
@@ -115,7 +115,6 @@ export default function MemberInputPage() {
         const data = await safeJson(res)
         throw new Error(data.error ?? 'Failed')
       }
-      // Reload to get fresh order from server (simpler than splicing)
       await load()
     } catch (e: any) {
       alert(e.message)
@@ -157,7 +156,6 @@ export default function MemberInputPage() {
       padding: 16,
     }}>
       <div style={{ maxWidth: 520, margin: '0 auto' }}>
-        {/* Header */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
           marginBottom: 12,
@@ -198,7 +196,6 @@ export default function MemberInputPage() {
           </div>
         )}
 
-        {/* Tasks list */}
         {loading ? (
           <div style={{ textAlign: 'center', padding: 30, color: '#8B8599' }}>Loading…</div>
         ) : tasks.length === 0 ? (
@@ -282,7 +279,6 @@ export default function MemberInputPage() {
           </div>
         )}
 
-        {/* Add new */}
         <div style={{
           background: '#fff', border: '1px solid #E8E3DB',
           borderRadius: 12, padding: 12,
