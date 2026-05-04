@@ -10,7 +10,6 @@ type Props = {
   currentMemberDisplayName?: string
 }
 
-// Inline SVG icons keeps the nav self-contained, no icon lib dep needed
 const Icon = {
   Home: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -37,6 +36,12 @@ const Icon = {
       <line x1="3" y1="10" x2="21" y2="10" />
     </svg>
   ),
+  Checklist: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 11 12 14 22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </svg>
+  ),
   Logout: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -50,7 +55,10 @@ export default function BottomNav({ role }: Props) {
   const pathname = usePathname()
   const router = useRouter()
 
-  const items: Array<{ href: string; label: string; icon: React.ReactNode; active: boolean; external?: boolean }> = [
+  const items: Array<{
+    href: string; label: string; icon: React.ReactNode;
+    active: boolean; external?: boolean
+  }> = [
     {
       href: '/dashboard', label: 'Dashboard', icon: Icon.Home,
       active: pathname === '/dashboard',
@@ -62,10 +70,20 @@ export default function BottomNav({ role }: Props) {
   ]
 
   if (role === 'admin') {
+    // Manage covers /manage and admin sub-pages that don't have their own tab
     items.push({
       href: '/manage', label: 'Manage', icon: Icon.Settings,
-      active: pathname.startsWith('/manage') || pathname.startsWith('/admin/family')
-              || pathname.startsWith('/admin/projects') || pathname.startsWith('/admin/devices'),
+      active: pathname.startsWith('/manage')
+              || pathname.startsWith('/admin/family')
+              || pathname.startsWith('/admin/projects')
+              || pathname.startsWith('/admin/devices')
+              || pathname.startsWith('/admin/ideas')
+              || pathname.startsWith('/admin/photos'),
+    })
+    // Tasks gets its own tab — used frequently enough for one-tap access
+    items.push({
+      href: '/admin/tasks', label: 'Tasks', icon: Icon.Checklist,
+      active: pathname.startsWith('/admin/tasks'),
     })
     items.push({
       href: '/admin?from=dashboard', label: 'Sunday Plan', icon: Icon.Calendar,

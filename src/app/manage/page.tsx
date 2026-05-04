@@ -18,14 +18,20 @@ export default async function ManagePage() {
     )
   }
 
-  // Quick counts to show on each tile so the admin sees state at a glance
   const supabase = getSupabaseAdmin()
-  const { count: memberCount } = await supabase
-    .from('family_members').select('*', { count: 'exact', head: true })
-  const { count: projectCount } = await supabase
-    .from('projects').select('*', { count: 'exact', head: true }).eq('status', 'active')
-  const { count: deviceCount } = await supabase
-    .from('device_tokens').select('*', { count: 'exact', head: true }).eq('revoked', false)
+  const [
+    { count: memberCount },
+    { count: projectCount },
+    { count: deviceCount },
+    { count: openTaskCount },
+    { count: ideaCount },
+  ] = await Promise.all([
+    supabase.from('family_members').select('*', { count: 'exact', head: true }),
+    supabase.from('projects').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+    supabase.from('device_tokens').select('*', { count: 'exact', head: true }),
+    supabase.from('tasks').select('*', { count: 'exact', head: true }).is('completed_at', null),
+    supabase.from('ideas').select('*', { count: 'exact', head: true }),
+  ])
 
   const tiles = [
     {
@@ -36,17 +42,38 @@ export default async function ManagePage() {
       color: '#7F77DD',
     },
     {
+      href: '/admin/tasks',
+      label: 'Tasks',
+      blurb: `${openTaskCount ?? 0} open tasks`,
+      desc: 'Add tasks for any family member. They show up on the kitchen TV and personal dashboards.',
+      color: '#C4522A',
+    },
+    {
+      href: '/admin/ideas',
+      label: 'Ideas',
+      blurb: `${ideaCount ?? 0} ideas`,
+      desc: 'Random thoughts, wishlist items, things to remember. Less structured than tasks.',
+      color: '#D4A017',
+    },
+    {
       href: '/admin/projects',
       label: 'Projects',
       blurb: `${projectCount ?? 0} active projects`,
-      desc: 'Create projects and add tasks. Mark projects as shared to put them on every dashboard.',
+      desc: 'Group tasks under projects. Mark a project as shared to put it on every dashboard.',
       color: '#1D9E75',
+    },
+    {
+      href: '/admin/photos',
+      label: 'Photos',
+      blurb: 'Photo rotation',
+      desc: 'Upload photos that rotate on the kitchen TV.',
+      color: '#4A90D9',
     },
     {
       href: '/admin/devices',
       label: 'Devices',
-      blurb: `${deviceCount ?? 0} active devices`,
-      desc: 'Mint URLs for wall-mounted dashboards. Revoke a URL to disable a display.',
+      blurb: `${deviceCount ?? 0} devices`,
+      desc: 'Mint URLs for wall-mounted dashboards. Toggle landscape/portrait or revoke access.',
       color: '#D85A30',
     },
   ]
@@ -71,9 +98,9 @@ export default async function ManagePage() {
                 borderLeft: `4px solid ${t.color}`,
               }}>
               <div style={{ display: 'flex', alignItems: 'baseline',
-                            justifyContent: 'space-between', marginBottom: 4 }}>
+                            justifyContent: 'space-between', marginBottom: 4, gap: 12 }}>
                 <span style={{ fontSize: 18, fontWeight: 600 }}>{t.label}</span>
-                <span style={{ fontSize: 13, color: '#8B8599' }}>{t.blurb}</span>
+                <span style={{ fontSize: 13, color: '#8B8599', textAlign: 'right' }}>{t.blurb}</span>
               </div>
               <p style={{ fontSize: 13, color: '#4A4A5A', margin: 0, lineHeight: 1.5 }}>
                 {t.desc}
