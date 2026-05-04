@@ -1,11 +1,33 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 type Member = { id: string; display_name: string; color: string | null; type?: string | null }
 
 export default function PickerPage() {
+  return (
+    <Suspense fallback={<LoadingFrame />}>
+      <PickerContent />
+    </Suspense>
+  )
+}
+
+function LoadingFrame() {
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: '#F7F4EF',
+      fontFamily: "'DM Sans', sans-serif",
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: '#8B8599', fontSize: 14,
+    }}>
+      Loading…
+    </div>
+  )
+}
+
+function PickerContent() {
   const params = useSearchParams()
   const token = params.get('d')
   const [members, setMembers] = useState<Member[]>([])

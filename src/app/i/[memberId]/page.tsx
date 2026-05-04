@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { Suspense, useEffect, useState, useRef } from 'react'
 import { useSearchParams, useParams } from 'next/navigation'
 import { ChevronUp, ChevronDown, ArrowLeft, Plus, Trash2 } from 'lucide-react'
 
@@ -15,6 +15,28 @@ type Task = {
 type Member = { id: string; display_name: string; color: string | null }
 
 export default function MemberInputPage() {
+  return (
+    <Suspense fallback={<LoadingFrame />}>
+      <MemberContent />
+    </Suspense>
+  )
+}
+
+function LoadingFrame() {
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: '#F7F4EF',
+      fontFamily: "'DM Sans', sans-serif",
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: '#8B8599', fontSize: 14,
+    }}>
+      Loading…
+    </div>
+  )
+}
+
+function MemberContent() {
   const params      = useSearchParams()
   const routeParams = useParams()
   const token    = params.get('d')
