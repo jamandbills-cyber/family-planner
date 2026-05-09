@@ -1,12 +1,18 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import type { FamilyMember } from '@/lib/types/dashboard'
 import type { WeekRange, DashboardCalendarEvent } from '@/lib/types/calendar'
 import WeekCalendar from '@/lib/WeekCalendar'
 
+type KitchenMember = {
+  id: string
+  display_name: string
+  color: string | null
+  type: 'adult' | 'child'
+}
+
 type KitchenColumn = {
-  member: FamilyMember
+  member: KitchenMember
   tasks: { id: string; text: string; due_date: string | null; project: { name: string; color: string | null } | null }[]
   ideas: { id: string; text: string }[]
 }
