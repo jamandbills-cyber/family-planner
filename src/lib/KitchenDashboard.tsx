@@ -381,6 +381,8 @@ export default function KitchenDashboard({
       }}>
         {columns.map(col => {
           const isEmpty = col.tasks.length === 0 && col.ideas.length === 0
+          const visibleTasks = col.tasks.slice(0, 4)
+          const hiddenTasks = Math.max(0, col.tasks.length - visibleTasks.length)
           if (isEmpty) {
             // Minimized vertical strip — just name written sideways
             return (
@@ -436,19 +438,35 @@ export default function KitchenDashboard({
                   fontSize: 'clamp(11px, 0.95vw, 14px)', lineHeight: 1.4,
                   color: theme.text,
                 }}>
-                  {col.tasks.map(t => (
+                  {visibleTasks.map(t => (
                     <div key={t.id} style={{
-                      display: 'flex', gap: 6, marginBottom: 4,
+                      display: 'flex', gap: 6, marginBottom: 4, minWidth: 0,
                     }}>
                       <span style={{ color: theme.subtext, flexShrink: 0 }}>·</span>
-                      <span style={{ wordBreak: 'break-word' }}>{t.text}</span>
+                      <span style={{
+                        overflow: 'hidden',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflowWrap: 'anywhere',
+                      }}>{t.text}</span>
                     </div>
                   ))}
+                  {hiddenTasks > 0 && (
+                    <div style={{
+                      marginTop: 4,
+                      fontSize: 'clamp(10px, 0.8vw, 12px)',
+                      color: theme.subtext,
+                      fontWeight: 600,
+                    }}>
+                      +{hiddenTasks} more task{hiddenTasks === 1 ? '' : 's'}
+                    </div>
+                  )}
                   {col.ideas.length > 0 && (
                     <div style={{
-                      marginTop: col.tasks.length > 0 ? 6 : 0,
-                      paddingTop: col.tasks.length > 0 ? 6 : 0,
-                      borderTop: col.tasks.length > 0 ? `1px dashed ${theme.border}` : 'none',
+                      marginTop: visibleTasks.length > 0 ? 6 : 0,
+                      paddingTop: visibleTasks.length > 0 ? 6 : 0,
+                      borderTop: visibleTasks.length > 0 ? `1px dashed ${theme.border}` : 'none',
                       fontSize: 'clamp(10px, 0.8vw, 12px)', color: theme.subtext,
                     }}>
                       {col.ideas.length} idea{col.ideas.length === 1 ? '' : 's'}

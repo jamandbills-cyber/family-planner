@@ -71,9 +71,9 @@ function densityScale(density: Density) {
     eventLocSize:  'clamp(10px, 0.8vw, 12px)',
     allDayBlockSize:'clamp(11px, 0.85vw, 13px)',
     leftColW:      'clamp(40px, 3.5vw, 56px)',
-    chipSize:      'clamp(14px, 1.2vw, 18px)',
-    chipFontSize:  'clamp(8px, 0.65vw, 10px)',
-    chipGap:       3,
+    chipSize:      'clamp(12px, 0.95vw, 15px)',
+    chipFontSize:  'clamp(7px, 0.55vw, 9px)',
+    chipGap:       2,
     minPxPerHour:  40,
     dinnerMealSize: 'clamp(11px, 0.85vw, 13px)',
     dinnerCookSize: 'clamp(9px, 0.7vw, 11px)',
@@ -119,8 +119,8 @@ function eventBlockStyle(heightPct: number) {
     pad:       '2px 5px',
     lineHeight: 1.1,
     showLocation: false,
-    showChips: false,
-    showCarpoolNote: false,
+    showChips: true,
+    showCarpoolNote: true,
   }
   if (heightPct >= 2) return {
     titleSize: 'clamp(9px, 0.7vw, 11px)',
@@ -151,9 +151,11 @@ function ChipRow({ involvedIds, members, chipSize, chipFontSize, chipGap }: {
     .map(id => members.find(m => m.id === id))
     .filter((m): m is FamilyMemberColor => !!m)
   if (involved.length === 0) return null
+  const visible = involved.slice(0, 4)
+  const hiddenCount = involved.length - visible.length
   return (
-    <div style={{ display: 'flex', gap: chipGap, marginTop: 2, flexWrap: 'wrap' }}>
-      {involved.map(m => (
+    <div style={{ display: 'flex', gap: chipGap, marginTop: 2, flexWrap: 'nowrap', overflow: 'hidden' }}>
+      {visible.map(m => (
         <div key={m.id} title={m.display_name} style={{
           width: chipSize as any, height: chipSize as any, borderRadius: '50%',
           background: m.color ?? '#888780', color: '#fff',
@@ -164,6 +166,17 @@ function ChipRow({ involvedIds, members, chipSize, chipFontSize, chipGap }: {
           {m.display_name[0].toUpperCase()}
         </div>
       ))}
+      {hiddenCount > 0 && (
+        <div title={`${hiddenCount} more`} style={{
+          minWidth: chipSize as any, height: chipSize as any, borderRadius: 999,
+          background: 'rgba(0,0,0,0.28)', color: '#fff',
+          fontSize: chipFontSize as any, fontWeight: 700,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '0 3px', flexShrink: 0,
+        }}>
+          +{hiddenCount}
+        </div>
+      )}
     </div>
   )
 }
@@ -356,14 +369,53 @@ export default function WeekCalendar({
               }}>
                 {dayEvts.map(e => {
                   const c = pickEventColor(e, members, isDark)
+                  const driverName = driverNameOf(e.driverId)
+                  const needsDriver = e.transportStatus === 'needs_driver' && !e.driverId
+                  const carpoolNote = e.carpoolNote
                   return (
-                    <div key={e.id} title={e.title} style={{
+                    <div
+                      key={e.id}
+                      title={`${e.title}${driverName ? ' · driver: ' + driverName : ''}${carpoolNote ? ' · ' + carpoolNote : ''}`}
+                      style={{
                       background: c.bg, color: c.fg,
                       fontSize: s.allDayBlockSize as any, fontWeight: 500,
                       padding: '3px 8px', borderRadius: 4,
-                      lineHeight: 1.4, wordBreak: 'break-word',
+                      lineHeight: 1.25,
+                      overflow: 'hidden',
                     }}>
-                      {displayTitle(e)}
+                      <div style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {displayTitle(e)}
+                      </div>
+                      {(driverName || needsDriver || carpoolNote || (e.involvedIds && e.involvedIds.length > 0)) && (
+                        <div style={{
+                          marginTop: 2,
+                          fontSize: s.eventLocSize as any,
+                          opacity: 0.9,
+                          overflow: 'hidden',
+                        }}>
+                          <div style={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {driverName && <span>driver: {driverName}</span>}
+                            {needsDriver && <span>needs driver</span>}
+                            {carpoolNote && <span>{driverName || needsDriver ? ' · ' : ''}{carpoolNote}</span>}
+                          </div>
+                          {e.involvedIds && e.involvedIds.length > 0 && (
+                            <ChipRow
+                              involvedIds={e.involvedIds}
+                              members={members}
+                              chipSize={s.chipSize as any}
+                              chipFontSize={s.chipFontSize as any}
+                              chipGap={s.chipGap} />
+                          )}
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -454,10 +506,13 @@ export default function WeekCalendar({
                     }}>
                     <div style={{
                       fontWeight: 600,
-                      wordBreak: 'break-word',
+                      overflowWrap: 'anywhere',
                       whiteSpace: isTinyBlock ? 'nowrap' : 'normal',
                       overflow: isTinyBlock ? 'hidden' : 'visible',
                       textOverflow: isTinyBlock ? 'ellipsis' : 'clip',
+                      display: isTinyBlock ? 'block' : '-webkit-box',
+                      WebkitLineClamp: isTinyBlock ? undefined : 2,
+                      WebkitBoxOrient: isTinyBlock ? undefined : 'vertical',
                       flexShrink: 0,
                     }}>
                       {title}

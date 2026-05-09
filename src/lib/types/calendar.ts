@@ -15,6 +15,7 @@ export type DashboardCalendarEvent = {
   involvedIds?: string[]
   driverId?: string | null
   transportStatus?: 'unset' | 'needs_driver' | 'no_transport' | 'assigned'
+  carpoolNote?: string
   isSchoolEvent?: boolean
 }
 
