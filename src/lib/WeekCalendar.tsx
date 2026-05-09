@@ -212,13 +212,13 @@ export default function WeekCalendar({
 
   const theme = isDark ? {
     card: '#1E1E2E', border: '#2A2A3A', text: '#F0EDE7', subtext: '#8B8599',
-    todayBg: '#22222F', todayAccent: '#FFB088',
+    todayBg: '#262638', todayHeaderBg: '#332A2D', todayAccent: '#FFB088',
     gridline: '#2A2A3A', nowLine: '#F87171',
     activeRing: '#F87171',
     dinnerBg: '#15151F', dinnerLabel: '#FFB088',
   } : {
     card: '#fff', border: '#E2DDD6', text: '#1A1A2E', subtext: '#8B8599',
-    todayBg: '#FFFAF5', todayAccent: '#C4522A',
+    todayBg: '#FFF4EA', todayHeaderBg: '#FFE7DA', todayAccent: '#C4522A',
     gridline: '#F4F1EB', nowLine: '#DC2626',
     activeRing: '#DC2626',
     dinnerBg: '#FAF6EE', dinnerLabel: '#C4522A',
@@ -233,7 +233,11 @@ export default function WeekCalendar({
     const [y, m, d] = weekStart.split('-').map(Number)
     return Array.from({ length: 7 }, (_, i) => {
       const date = new Date(y, m - 1, d + i)
-      return { dayIdx: i, dateNum: date.getDate() }
+      return {
+        dayIdx: i,
+        dateNum: date.getDate(),
+        label: i === 0 ? 'Today' : DAY_LABELS_SHORT[date.getDay()],
+      }
     })
   }, [weekStart])
 
@@ -303,6 +307,9 @@ export default function WeekCalendar({
               textAlign: 'center', borderLeft: `1px solid ${theme.gridline}`,
               display: 'flex', alignItems: 'baseline', justifyContent: 'center',
               gap: 6,
+              background: isToday ? theme.todayHeaderBg : 'transparent',
+              borderTop: isToday ? `4px solid ${theme.todayAccent}` : '4px solid transparent',
+              boxShadow: isToday ? `inset 0 -1px 0 ${theme.todayAccent}` : undefined,
             }}>
               <span style={{
                 fontSize: s.dayLabelSize as any,
@@ -310,7 +317,7 @@ export default function WeekCalendar({
                 fontWeight: isToday ? 700 : 500,
                 textTransform: 'uppercase', letterSpacing: '0.05em',
               }}>
-                {DAY_LABELS_SHORT[d.dayIdx]}
+                {d.label}
               </span>
               <span style={{
                 fontSize: s.dayNumSize as any,
@@ -339,11 +346,13 @@ export default function WeekCalendar({
           </div>
           {Array.from({ length: 7 }).map((_, dayIdx) => {
             const dayEvts = allDayEvents.filter(e => e.dayIdx === dayIdx)
+            const isToday = dayIdx === todayDayIdx
             return (
               <div key={dayIdx} style={{
                 borderLeft: `1px solid ${theme.gridline}`,
                 padding: '3px 4px',
                 display: 'flex', flexDirection: 'column', gap: 3,
+                background: isToday ? theme.todayBg : 'transparent',
               }}>
                 {dayEvts.map(e => {
                   const c = pickEventColor(e, members, isDark)
@@ -392,6 +401,9 @@ export default function WeekCalendar({
               position: 'relative',
               borderLeft: `1px solid ${theme.gridline}`,
               background: dayIdx === todayDayIdx ? theme.todayBg : 'transparent',
+              boxShadow: dayIdx === todayDayIdx
+                ? `inset 3px 0 0 ${theme.todayAccent}, inset -1px 0 0 ${theme.todayAccent}`
+                : undefined,
             }}>
               {Array.from({ length: endHour - startHour }).map((_, i) => (
                 <div key={i} style={{

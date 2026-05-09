@@ -10,7 +10,7 @@ export default async function ProfilePage() {
 
   const { data: member } = await supabase
     .from('family_members')
-    .select('*')
+    .select('id, username, email, display_name, type, role, phone, color, can_drive, ics_feeds, auth_user_id, created_at, updated_at')
     .eq('auth_user_id', user.id)
     .single()
 

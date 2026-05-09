@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { google } from 'googleapis'
-import { startOfWeek, endOfWeek, addWeeks, format } from 'date-fns'
+import { addDays, addWeeks, format, startOfWeek } from 'date-fns'
 import type { DashboardCalendarEvent, WeekRange } from '@/lib/types/calendar'
 import { getSundayPlan } from '@/lib/sunday-plan'
 
@@ -41,11 +41,20 @@ function parseTimeStr(timeStr: string): number {
   return hours * 60 + minutes
 }
 
-function savedEventToDashboard(saved: any, weekStartDate: Date): DashboardCalendarEvent | null {
+function savedEventToDashboard(
+  saved: any,
+  planWeekStartDate: Date,
+  displayStartDate: Date
+): DashboardCalendarEvent | null {
   if (saved.dayIdx === undefined || saved.dayIdx < 0 || saved.dayIdx > 6) return null
 
-  const eventDate = new Date(weekStartDate)
+  const eventDate = new Date(planWeekStartDate)
   eventDate.setDate(eventDate.getDate() + saved.dayIdx)
+  const displayDayIdx = Math.floor(
+    (new Date(eventDate.toDateString()).getTime() - new Date(displayStartDate.toDateString()).getTime()) / 86400000
+  )
+  if (displayDayIdx < 0 || displayDayIdx > 6) return null
+
   const dateStr = eventDate.toISOString().slice(0, 10)
 
   let startMinutes = 0
@@ -74,13 +83,13 @@ function savedEventToDashboard(saved: any, weekStartDate: Date): DashboardCalend
   }
 
   return {
-    id: saved.id ?? `synth-${saved.dayIdx}-${saved.title}`,
+    id: saved.id ?? `synth-${displayDayIdx}-${saved.title}`,
     title: saved.title ?? '(untitled)',
     startISO: `${dateStr}T${String(Math.floor(startMinutes/60)).padStart(2,'0')}:${String(startMinutes%60).padStart(2,'0')}:00`,
     endISO:   `${dateStr}T${String(Math.floor(endMinutes/60)).padStart(2,'0')}:${String(endMinutes%60).padStart(2,'0')}:00`,
     allDay: !!saved.allDay,
     location: saved.location ?? undefined,
-    dayIdx: saved.dayIdx,
+    dayIdx: displayDayIdx,
     startMinutes,
     endMinutes,
     involvedIds: saved.involvedIds ?? [],
@@ -98,33 +107,59 @@ function isSchoolish(title: string, id?: string) {
 
 export async function fetchWeekCalendar(weekOffset: number = 0): Promise<WeekRange> {
   const calendarId = process.env.GOOGLE_CALENDAR_ID ?? 'primary'
-  const referenceDate = addWeeks(new Date(), weekOffset)
-  const weekStart = startOfWeek(referenceDate, { weekStartsOn: 0 })
-  const weekEnd   = endOfWeek(referenceDate,   { weekStartsOn: 0 })
-  const weekStartStr = format(weekStart, 'yyyy-MM-dd')
+  const displayStart = new Date(addWeeks(new Date(), weekOffset).toDateString())
+  const displayEnd = addDays(displayStart, 6)
+  const displayMax = addDays(displayStart, 7)
+  const displayStartStr = format(displayStart, 'yyyy-MM-dd')
 
   const auth = getGoogleCalendarAuth()
   const calendar = google.calendar({ version: 'v3', auth })
 
   const response = await calendar.events.list({
     calendarId,
-    timeMin: weekStart.toISOString(),
-    timeMax: weekEnd.toISOString(),
+    timeMin: displayStart.toISOString(),
+    timeMax: displayMax.toISOString(),
     singleEvents: true,
     orderBy: 'startTime',
     maxResults: 250,
   })
 
-  const wsParts = {
-    year: weekStart.getFullYear(),
-    month: weekStart.getMonth(),
-    day: weekStart.getDate(),
+  const displayStartParts = {
+    year: displayStart.getFullYear(),
+    month: displayStart.getMonth(),
+    day: displayStart.getDate(),
   }
-  const wsJulian = julianDay(wsParts.year, wsParts.month, wsParts.day)
+  const displayStartJulian = julianDay(
+    displayStartParts.year,
+    displayStartParts.month,
+    displayStartParts.day
+  )
 
-  // Sunday-plan state lives in Supabase.
-  const adminState = await getSundayPlan(weekStartStr)
-  const savedEvents: any[] = adminState?.events ?? []
+  // Sunday-plan state is saved by Sunday-start week. A rolling 7-day display
+  // may cross a Sunday boundary, so merge state from both touched weeks.
+  const firstPlanWeekStart = startOfWeek(displayStart, { weekStartsOn: 0 })
+  const secondPlanWeekStart = startOfWeek(displayEnd, { weekStartsOn: 0 })
+  const planWeekStarts = [firstPlanWeekStart]
+  if (format(secondPlanWeekStart, 'yyyy-MM-dd') !== format(firstPlanWeekStart, 'yyyy-MM-dd')) {
+    planWeekStarts.push(secondPlanWeekStart)
+  }
+
+  const planStates = await Promise.all(
+    planWeekStarts.map(async planWeekStart => ({
+      planWeekStart,
+      state: await getSundayPlan(format(planWeekStart, 'yyyy-MM-dd')),
+    }))
+  )
+
+  const savedEvents: any[] = planStates.flatMap(({ planWeekStart, state }) =>
+    (state?.events ?? []).map((event: any) => {
+      const eventDate = addDays(planWeekStart, event.dayIdx ?? 0)
+      const displayDayIdx = Math.floor(
+        (new Date(eventDate.toDateString()).getTime() - new Date(displayStart.toDateString()).getTime()) / 86400000
+      )
+      return { ...event, displayDayIdx, planWeekStart }
+    }).filter((event: any) => event.displayDayIdx >= 0 && event.displayDayIdx <= 6)
+  )
 
   const calendarEvents: DashboardCalendarEvent[] = (response.data.items ?? [])
     .map(raw => {
@@ -137,7 +172,7 @@ export async function fetchWeekCalendar(weekOffset: number = 0): Promise<WeekRan
       const endParts   = endStr ? parseLocalParts(endStr) : startParts
 
       const startJulian = julianDay(startParts.year, startParts.month, startParts.day)
-      const dayIdx = startJulian - wsJulian
+      const dayIdx = startJulian - displayStartJulian
       if (dayIdx < 0 || dayIdx > 6) return null
 
       const startMinutes = startParts.allDay ? 0 : startParts.hours * 60 + startParts.minutes
@@ -167,7 +202,7 @@ export async function fetchWeekCalendar(weekOffset: number = 0): Promise<WeekRan
 
       const saved = savedEvents.find((s: any) => s.id === raw.id)
                 ?? savedEvents.find((s: any) =>
-                     s.title === raw.summary && s.dayIdx === dayIdx)
+                     s.title === raw.summary && s.displayDayIdx === dayIdx)
       if (saved) {
         evt.involvedIds = saved.involvedIds ?? []
         evt.driverId = saved.driverId ?? null
@@ -180,15 +215,15 @@ export async function fetchWeekCalendar(weekOffset: number = 0): Promise<WeekRan
 
   const schoolEvents: DashboardCalendarEvent[] = savedEvents
     .filter((s: any) => typeof s.id === 'string' && s.id.startsWith('school_'))
-    .map(s => savedEventToDashboard(s, weekStart))
+    .map(s => savedEventToDashboard(s, s.planWeekStart, displayStart))
     .filter((e): e is DashboardCalendarEvent => e !== null)
 
   const all = [...calendarEvents, ...schoolEvents]
     .sort((a, b) => a.dayIdx !== b.dayIdx ? a.dayIdx - b.dayIdx : a.startMinutes - b.startMinutes)
 
   return {
-    weekStart: weekStartStr,
-    weekEnd:   format(weekEnd, 'yyyy-MM-dd'),
+    weekStart: displayStartStr,
+    weekEnd:   format(displayEnd, 'yyyy-MM-dd'),
     events: all,
     syncedAt: new Date().toISOString(),
   }

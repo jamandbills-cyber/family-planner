@@ -22,7 +22,9 @@ export default async function FamilyAdminPage() {
   }
 
   const { data: members } = await supabase.from('family_members')
-    .select('*').order('type', { ascending: false }).order('display_name')
+    .select('id, username, email, display_name, type, role, phone, color, can_drive, ics_feeds, auth_user_id, created_at, updated_at')
+    .order('type', { ascending: false })
+    .order('display_name')
 
   return (
     <AuthedLayout>

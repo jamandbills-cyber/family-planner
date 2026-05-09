@@ -25,13 +25,15 @@ export default async function AdminProjectsPage() {
     .select('id, display_name, color').order('display_name')
 
   const { data: projects } = await supabase.from('projects')
-    .select('*').eq('status', 'active').order('name')
+    .select('id, name, color, owner_id, is_shared, status, created_at, updated_at')
+    .eq('status', 'active')
+    .order('name')
 
   const projectIds = (projects ?? []).map(p => p.id)
 
   const { data: tasks } = projectIds.length > 0
     ? await supabase.from('tasks')
-        .select('*')
+        .select('id, project_id, text, owner_id, creator_id, due_date, pinned, completed_at, created_at, updated_at, position')
         .in('project_id', projectIds)
         .is('completed_at', null)
         .order('created_at', { ascending: false })

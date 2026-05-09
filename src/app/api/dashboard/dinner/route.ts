@@ -1,20 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { addDays, format, startOfWeek } from 'date-fns'
 
 export const dynamic = 'force-dynamic'
 
 type DinnerRow = { dayIdx: number; meal: string; cook: string }
-
-function getCurrentWeekStart(): string {
-  const today = new Date()
-  // Sunday-start week
-  const day = today.getDay()
-  const sunday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - day)
-  const y = sunday.getFullYear()
-  const m = String(sunday.getMonth() + 1).padStart(2, '0')
-  const d = String(sunday.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
 
 async function tryReadFromSupabase(weekStart: string): Promise<DinnerRow[] | null> {
   try {
@@ -34,7 +24,31 @@ async function tryReadFromSupabase(weekStart: string): Promise<DinnerRow[] | nul
 }
 
 export async function GET() {
-  const weekStart = getCurrentWeekStart()
-  const dinner = await tryReadFromSupabase(weekStart) ?? []
-  return NextResponse.json({ dinner, weekStart })
+  const displayStart = new Date(new Date().toDateString())
+  const displayEnd = addDays(displayStart, 6)
+  const firstPlanWeekStart = startOfWeek(displayStart, { weekStartsOn: 0 })
+  const secondPlanWeekStart = startOfWeek(displayEnd, { weekStartsOn: 0 })
+  const planStarts = [firstPlanWeekStart]
+  if (format(firstPlanWeekStart, 'yyyy-MM-dd') !== format(secondPlanWeekStart, 'yyyy-MM-dd')) {
+    planStarts.push(secondPlanWeekStart)
+  }
+
+  const plans = await Promise.all(
+    planStarts.map(async planStart => ({
+      planStart,
+      dinner: await tryReadFromSupabase(format(planStart, 'yyyy-MM-dd')) ?? [],
+    }))
+  )
+
+  const dinner = plans.flatMap(({ planStart, dinner }) =>
+    dinner.map(slot => {
+      const slotDate = addDays(planStart, slot.dayIdx)
+      const dayIdx = Math.floor(
+        (new Date(slotDate.toDateString()).getTime() - new Date(displayStart.toDateString()).getTime()) / 86400000
+      )
+      return { ...slot, dayIdx }
+    }).filter(slot => slot.dayIdx >= 0 && slot.dayIdx <= 6)
+  )
+
+  return NextResponse.json({ dinner, weekStart: format(displayStart, 'yyyy-MM-dd') })
 }

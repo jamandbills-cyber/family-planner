@@ -122,7 +122,9 @@ function DashboardNav({ pathname, role, onLogout }: {
     items.push({
       href: '/manage', label: 'Manage', icon: Icon.Settings,
       active: pathname.startsWith('/manage') || pathname.startsWith('/admin/family')
-              || pathname.startsWith('/admin/projects') || pathname.startsWith('/admin/devices'),
+              || pathname.startsWith('/admin/projects') || pathname.startsWith('/admin/devices')
+              || pathname.startsWith('/admin/tasks') || pathname.startsWith('/admin/ideas')
+              || pathname.startsWith('/admin/photos'),
     })
     items.push({
       href: '/admin?from=dashboard', label: 'Sunday Plan', icon: Icon.Calendar, active: false,
