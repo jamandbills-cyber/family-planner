@@ -70,7 +70,7 @@ export async function getDashboardForMember(memberId: string): Promise<Dashboard
 
   const { data: member } = await supabase
     .from('family_members')
-    .select('id, username, email, display_name, type, role, phone, color, can_drive, ics_feeds, auth_user_id')
+    .select('id, username, email, display_name, type, role, phone, color, can_drive, ics_feeds, auth_user_id, created_at, updated_at')
     .eq('id', memberId)
     .single()
   if (!member) return null
