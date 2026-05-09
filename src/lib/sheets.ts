@@ -9,6 +9,16 @@ function getSheetsClient(accessToken: string) {
   return google.sheets({ version: 'v4', auth })
 }
 
+function getServiceSheetsClient() {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
+  if (!raw) throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY not set')
+  const auth = new google.auth.GoogleAuth({
+    credentials: JSON.parse(raw),
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  })
+  return google.sheets({ version: 'v4', auth })
+}
+
 // ─── Read a range ─────────────────────────────────────────────
 async function readRange(accessToken: string, range: string): Promise<string[][]> {
   const sheets = getSheetsClient(accessToken)
@@ -16,9 +26,26 @@ async function readRange(accessToken: string, range: string): Promise<string[][]
   return (res.data.values ?? []) as string[][]
 }
 
+async function readRangeWithServiceAccount(range: string): Promise<string[][]> {
+  const sheets = getServiceSheetsClient()
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEETS_ID, range })
+  return (res.data.values ?? []) as string[][]
+}
+
 // ─── Append rows ──────────────────────────────────────────────
 async function appendRows(accessToken: string, range: string, rows: string[][]) {
   const sheets = getSheetsClient(accessToken)
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SHEETS_ID,
+    range,
+    valueInputOption: 'RAW',
+    insertDataOption: 'INSERT_ROWS',
+    requestBody: { values: rows },
+  })
+}
+
+async function appendRowsWithServiceAccount(range: string, rows: string[][]) {
+  const sheets = getServiceSheetsClient()
   await sheets.spreadsheets.values.append({
     spreadsheetId: SHEETS_ID,
     range,
@@ -56,6 +83,15 @@ export interface SheetMember {
 
 export async function getFamilyMembers(accessToken: string): Promise<SheetMember[]> {
   const rows = await readRange(accessToken, 'Family!A2:G100')
+  return parseFamilyRows(rows)
+}
+
+export async function getFamilyMembersWithServiceAccount(): Promise<SheetMember[]> {
+  const rows = await readRangeWithServiceAccount('Family!A2:G100')
+  return parseFamilyRows(rows)
+}
+
+function parseFamilyRows(rows: string[][]): SheetMember[] {
   return rows
     .filter(r => r[0])
     .map(r => ({
@@ -98,6 +134,11 @@ export async function getToken(accessToken: string, token: string): Promise<Toke
 export async function saveTokens(accessToken: string, tokens: Omit<TokenRecord, 'usedAt'>[]) {
   const rows = tokens.map(t => [t.token, t.memberId, t.weekStart, t.formType, ''])
   await appendRows(accessToken, 'Tokens!A:E', rows)
+}
+
+export async function saveTokensWithServiceAccount(tokens: Omit<TokenRecord, 'usedAt'>[]) {
+  const rows = tokens.map(t => [t.token, t.memberId, t.weekStart, t.formType, ''])
+  await appendRowsWithServiceAccount('Tokens!A:E', rows)
 }
 
 // ═══════════════════════════════════════════════════════════════

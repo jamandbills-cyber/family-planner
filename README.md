@@ -1,130 +1,64 @@
 # Family Planner
 
-Weekly family planning app with Google Calendar sync, form collection, and a Sunday meeting view.
-
----
+Weekly family planning app with Supabase-backed dashboards, Google Calendar/Sheets workflows, tokenized forms, device dashboards, and Vercel cron jobs.
 
 ## Tech Stack
 
-- **Next.js 14** (App Router, TypeScript)
-- **NextAuth** — Google OAuth for admin access
-- **Google Calendar API** — reads your shared family calendar
-- **Vercel** — hosting + cron jobs
-- **Twilio** — automated texts (added in a later step)
+- **Next.js 15** App Router, React 19, TypeScript
+- **Supabase** for Auth, Postgres data, and photo storage
+- **NextAuth** with Google OAuth for Google Calendar/Sheets/Gmail access in the Sunday planning flow
+- **Tailwind CSS** for styling
+- **Twilio** for SMS form links
+- **Vercel** for hosting and cron
 
----
-
-## Setup: Step by Step
-
-### 1. Clone and install
+## Setup
 
 ```bash
-git clone <your-repo-url>
-cd family-planner
 npm install
-```
-
-### 2. Google Cloud Project
-
-1. Go to [console.cloud.google.com](https://console.cloud.google.com)
-2. Create a new project (e.g. "Family Planner")
-3. Go to **APIs & Services → Enable APIs**
-4. Enable: **Google Calendar API**
-5. Go to **APIs & Services → Credentials**
-6. Click **Create Credentials → OAuth Client ID**
-   - Application type: **Web application**
-   - Authorized redirect URIs:
-     - `http://localhost:3000/api/auth/callback/google` (for local dev)
-     - `https://your-vercel-domain.vercel.app/api/auth/callback/google` (for production)
-7. Copy your **Client ID** and **Client Secret**
-
-### 3. Configure environment variables
-
-```bash
 cp .env.example .env.local
 ```
 
-Then fill in `.env.local`:
+Fill in `.env.local` with the Supabase, Google, cron, and Twilio values from `.env.example`.
 
-```env
-GOOGLE_CLIENT_ID=your_client_id_from_step_2
-GOOGLE_CLIENT_SECRET=your_client_secret_from_step_2
-
-# Generate with: openssl rand -base64 32
-NEXTAUTH_SECRET=your_random_secret
-
-NEXTAUTH_URL=http://localhost:3000
-
-# Your shared family calendar ID
-# Find it: Google Calendar → Settings → [your calendar] → Calendar ID
-# Looks like: abc123@group.calendar.google.com
-# Or use "primary" for the main calendar of the signed-in account
-GOOGLE_CALENDAR_ID=primary
-
-# Comma-separated Google emails that can access the admin/meeting pages
-ADMIN_EMAILS=your.email@gmail.com
-```
-
-### 4. Update family members
-
-Open `src/lib/family.ts` and replace the placeholder names and phone numbers with your real family.
-
-Phone numbers must be in E.164 format: `+18015551234`
-
-### 5. Run locally
+Run locally:
 
 ```bash
 npm run dev
 ```
 
-Visit [http://localhost:3000](http://localhost:3000) — you'll be redirected to sign in with Google.
+## Supabase
 
----
+The app expects these public-schema tables: `family_members`, `projects`, `tasks`, `ideas`, `captures`, `device_tokens`, and `sunday_plans`. Local migrations live in `supabase/migrations`.
 
-## Deploy to Vercel
+Admin authorization is based on the linked Supabase family member row:
 
-1. Push your code to a GitHub repository
-2. Go to [vercel.com](https://vercel.com) → New Project → Import your repo
-3. Add all your environment variables in Vercel's project settings
-4. Update `NEXTAUTH_URL` to your Vercel domain: `https://your-app.vercel.app`
-5. Add your Vercel domain to the authorized redirect URIs in Google Cloud Console
-6. Deploy
+- `family_members.auth_user_id` must match the signed-in Supabase user.
+- `family_members.role` must be `admin` for admin pages and admin APIs.
 
----
+## Google Access
 
-## Project Structure
+Supabase controls app/admin membership. The Sunday planning flow also requires Google OAuth because it reads/writes Google Calendar and Sheets and may send Gmail messages.
 
+`ADMIN_EMAILS` is a Google OAuth allowlist. If it is empty, Google sign-in is denied.
+
+## Public Surfaces
+
+This app intentionally keeps some read endpoints public for kitchen/dashboard use, including household dashboard, plan, family, calendar, and photo display data. Do not deploy this way unless anyone with the deployment URL may see that read data.
+
+Writes and admin operations are protected by Supabase admin role checks, scoped device tokens, or the internal `CRON_SECRET`.
+
+## Deploy
+
+1. Add all `.env.example` values to Vercel.
+2. Set `NEXTAUTH_URL` to the deployed URL.
+3. Add the deployed Google OAuth callback URL: `https://your-app.vercel.app/api/auth/callback/google`.
+4. Share the Google Sheet with the service account email from `GOOGLE_SERVICE_ACCOUNT_KEY`.
+5. Deploy.
+
+## Useful Commands
+
+```bash
+npm run dev
+npm run lint
+npm run build
 ```
-src/
-├── app/
-│   ├── admin/              ← Admin setup page (Google OAuth protected)
-│   ├── api/
-│   │   ├── auth/           ← NextAuth handler
-│   │   └── calendar/       ← Google Calendar sync endpoint
-│   └── form/
-│       ├── kid/[token]/    ← Kids form (coming next)
-│       └── adult/[token]/  ← Adults form (coming next)
-├── lib/
-│   ├── types.ts            ← Shared TypeScript types
-│   ├── family.ts           ← Family member config (edit this)
-│   ├── auth.ts             ← NextAuth config
-│   └── google-calendar.ts  ← Calendar API helpers
-```
-
----
-
-## What's Been Built
-
-- [x] Admin setup page — week calendar, event assignment, dinner grid, standing rules
-- [x] Kids form — off-calendar events, shopping list, meeting topics
-- [x] Adults form — driving availability, unavailable days, off-calendar events
-- [x] Google Calendar API integration
-
-## Coming Next
-
-- [ ] Google Sheets — store form responses
-- [ ] Unique tokenized form links per person
-- [ ] Meeting page — live review and adjustments
-- [ ] Confirm & send — email, texts, calendar invites
-- [ ] Twilio — automated Sunday morning texts
-- [ ] Vercel Cron — scheduled Sunday send

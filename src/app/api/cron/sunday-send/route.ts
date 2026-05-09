@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { startOfWeek, format } from 'date-fns'
 import { getSundayPlan } from '@/lib/sunday-plan'
-
-const CRON_SECRET = process.env.CRON_SECRET!
-const APP_URL     = process.env.NEXTAUTH_URL ?? 'https://family-planner-tawny.vercel.app'
+import { requireInternalRequest } from '@/lib/internal-auth'
+import { getAppUrl } from '@/lib/app-url'
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const unauthorized = requireInternalRequest(req)
+  if (unauthorized) return unauthorized
+  const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
     const weekStart = format(
@@ -27,11 +26,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ skipped: true, reason: 'Not marked as ready' })
     }
 
-    const sendRes = await fetch(`${APP_URL}/api/send-forms`, {
+    const sendRes = await fetch(`${getAppUrl(req)}/api/send-forms`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-internal-token': CRON_SECRET,
+        'x-internal-token': cronSecret,
       },
       body: JSON.stringify({ weekStart }),
     })

@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { requireAdminMember } from '@/lib/auth-helpers'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireAdminMember()
+  if (auth.response) return auth.response
 
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase
@@ -41,8 +40,8 @@ function slugify(s: string) {
 //   ics_feeds     text[] NULL
 //   auth_user_id  uuid NULL
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireAdminMember()
+  if (auth.response) return auth.response
 
   try {
     const body = await req.json()

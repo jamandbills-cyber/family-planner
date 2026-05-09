@@ -76,7 +76,6 @@ export const authOptions: NextAuthOptions = {
 
     async session({ session, token }) {
       session.accessToken  = token.accessToken as string
-      session.refreshToken = token.refreshToken as string
       if (token.error) {
         (session as any).error = token.error
       }
@@ -85,7 +84,7 @@ export const authOptions: NextAuthOptions = {
 
     async signIn({ user }) {
       if (!user.email) return false
-      if (ADMIN_EMAILS.length === 0) return true
+      if (ADMIN_EMAILS.length === 0) return false
       return ADMIN_EMAILS.includes(user.email.toLowerCase())
     },
   },
@@ -99,7 +98,6 @@ export const authOptions: NextAuthOptions = {
 declare module 'next-auth' {
   interface Session {
     accessToken:  string
-    refreshToken: string
     error?:       string
   }
 }

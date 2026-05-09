@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSundayPlan, saveSundayPlan } from '@/lib/sunday-plan'
+import { requireAdminMember } from '@/lib/auth-helpers'
 
 export async function GET(req: NextRequest) {
   const weekStart = req.nextUrl.searchParams.get('weekStart')
@@ -18,6 +19,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAdminMember()
+  if (auth.response) return auth.response
+
   try {
     // Support both JSON body and Blob/sendBeacon body (text)
     let weekStart: string | undefined

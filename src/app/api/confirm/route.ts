@@ -4,11 +4,14 @@ import { authOptions } from '@/lib/auth'
 import { savePlan, getFamilyMembers } from '@/lib/sheets'
 import { sendEmail, buildWeeklyPlanEmail } from '@/lib/gmail'
 import { sendSMS } from '@/lib/twilio'
+import { getAppUrl } from '@/lib/app-url'
+import { requireAdminMember } from '@/lib/auth-helpers'
 import { google } from 'googleapis'
 
-const APP_URL = process.env.NEXTAUTH_URL ?? 'https://family-planner-tawny.vercel.app'
-
 export async function POST(req: NextRequest) {
+  const auth = await requireAdminMember()
+  if (auth.response) return auth.response
+
   const session = await getServerSession(authOptions)
   if (!session?.accessToken) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -43,7 +46,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Text adults the live plan link
-    const planUrl  = `${APP_URL}/plan`
+    const planUrl  = `${getAppUrl(req)}/plan`
     const textsTo  = adults.filter(m => m.phone && !m.phone.includes('X'))
     const textResults = await Promise.allSettled(
       textsTo.map(m => sendSMS(m.phone, `Family plan for ${plan.weekLabel ?? 'this week'} is confirmed. View it here: ${planUrl}`))

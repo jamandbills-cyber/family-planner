@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { validateDeviceToken } from '@/lib/device-token'
+import { validateDeviceToken, type DeviceTokenInfo } from '@/lib/device-token'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -23,20 +23,42 @@ async function getOrCreatePersonalProject(ownerId: string): Promise<string> {
   return created.id
 }
 
+function resolveOwnerId(
+  auth: DeviceTokenInfo,
+  requestedOwnerId: string | null
+): { ownerId: string } | { response: NextResponse } {
+  if (auth.viewType === 'personal') {
+    if (!auth.memberId) {
+      return { response: NextResponse.json({ error: 'Device has no member' }, { status: 403 }) }
+    }
+    if (requestedOwnerId && requestedOwnerId !== auth.memberId) {
+      return { response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
+    }
+    return { ownerId: auth.memberId }
+  }
+
+  if (!requestedOwnerId) {
+    return { response: NextResponse.json({ error: 'owner_id required' }, { status: 400 }) }
+  }
+  return { ownerId: requestedOwnerId }
+}
+
 // GET /api/i/tasks?d={token}&owner_id={id} (also accepts member_id legacy)
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('d')
-  const ownerId = req.nextUrl.searchParams.get('owner_id')
-                ?? req.nextUrl.searchParams.get('member_id')
+  const requestedOwnerId = req.nextUrl.searchParams.get('owner_id')
+                        ?? req.nextUrl.searchParams.get('member_id')
   const auth = await validateDeviceToken(token)
   if (!auth.valid) return NextResponse.json({ error: 'Invalid device' }, { status: 401 })
-  if (!ownerId)    return NextResponse.json({ error: 'owner_id required' }, { status: 400 })
+
+  const scope = resolveOwnerId(auth, requestedOwnerId)
+  if ('response' in scope) return scope.response
 
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase
     .from('tasks')
     .select('id, text, due_date, completed_at, created_at, position, owner_id, creator_id, project_id')
-    .eq('owner_id', ownerId)
+    .eq('owner_id', scope.ownerId)
     .is('completed_at', null)
     .order('position', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: true })
@@ -52,13 +74,16 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const owner_id   = body.owner_id ?? body.member_id
+    const requestedOwnerId = body.owner_id ?? body.member_id
     const text       = (body.text ?? '').toString().trim()
-    const creator_id = body.creator_id ?? owner_id
 
-    if (!owner_id || !text) {
-      return NextResponse.json({ error: 'owner_id and text required' }, { status: 400 })
+    const scope = resolveOwnerId(auth, requestedOwnerId)
+    if ('response' in scope) return scope.response
+    if (!text) {
+      return NextResponse.json({ error: 'text required' }, { status: 400 })
     }
+    const owner_id   = scope.ownerId
+    const creator_id = auth.viewType === 'personal' ? owner_id : body.creator_id ?? owner_id
 
     const supabase = getSupabaseAdmin()
 

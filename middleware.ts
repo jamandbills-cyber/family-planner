@@ -4,16 +4,21 @@ import { createServerClient } from '@supabase/ssr'
 const PUBLIC_PATHS = [
   '/login',
   '/api/auth',
-  '/admin',           // existing NextAuth-protected admin pages
+  '/admin',           // admin pages perform role checks server-side
   '/api/admin-state',
   '/api/family',
   '/api/calendar',
+  '/api/dashboard',
+  '/api/photos',
+  '/api/plan',
+  '/api/submissions',
   '/api/send-forms',
   '/api/confirm',
   '/form',
   '/api/submit',
   '/d/',              // device-token dashboards (no login)
-  '/api/d/',          // device-token data fetches
+  '/i/',              // device-token input pages (no login)
+  '/api/i/',          // device-token data fetches
 ]
 
 export async function middleware(request: NextRequest) {
@@ -27,12 +32,12 @@ export async function middleware(request: NextRequest) {
 
   const isProtected = pathname.startsWith('/dashboard') ||
                       pathname.startsWith('/profile') ||
-                      pathname.startsWith('/api/tasks') ||
-                      pathname.startsWith('/api/projects') ||
-                      pathname.startsWith('/api/ideas') ||
+                      pathname.startsWith('/manage') ||
                       pathname.startsWith('/api/admin/family') ||
                       pathname.startsWith('/api/admin/projects') ||
                       pathname.startsWith('/api/admin/tasks') ||
+                      pathname.startsWith('/api/admin/ideas') ||
+                      pathname.startsWith('/api/admin/photos') ||
                       pathname.startsWith('/api/admin/devices')
 
   if (!isProtected) return NextResponse.next()

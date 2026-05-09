@@ -5,10 +5,13 @@ import { getFamilyMembers, saveTokens } from '@/lib/sheets'
 import { generateWeekTokens } from '@/lib/tokens'
 import { sendEmail } from '@/lib/gmail'
 import { FAMILY_MEMBERS } from '@/lib/family'
-
-const APP_URL = process.env.NEXTAUTH_URL ?? 'https://family-planner-tawny.vercel.app'
+import { getAppUrl } from '@/lib/app-url'
+import { requireAdminMember } from '@/lib/auth-helpers'
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAdminMember()
+  if (auth.response) return auth.response
+
   const session = await getServerSession(authOptions)
   if (!session?.accessToken) {
     return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
@@ -35,6 +38,7 @@ export async function POST(req: NextRequest) {
   if (members.length === 0) {
     return NextResponse.json({ error: 'No family members found' }, { status: 400 })
   }
+  const appUrl = getAppUrl(req)
 
   // Generate tokens and save to sheet
   const tokens = generateWeekTokens(members, weekStart)
@@ -57,7 +61,7 @@ export async function POST(req: NextRequest) {
       continue
     }
 
-    const formUrl = `${APP_URL}/form/${t.formType}/${t.token}`
+    const formUrl = `${appUrl}/form/${t.formType}/${t.token}`
     const isKid   = t.formType === 'kid'
 
     const html = `

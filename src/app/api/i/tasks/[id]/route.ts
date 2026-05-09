@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateDeviceToken } from '@/lib/device-token'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
+function canAccessTaskOwner(auth: Awaited<ReturnType<typeof validateDeviceToken>>, ownerId: string) {
+  return auth.viewType !== 'personal' || auth.memberId === ownerId
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -16,14 +20,17 @@ export async function PATCH(
     const body = await req.json()
     const supabase = getSupabaseAdmin()
 
-    if (body.move === 'up' || body.move === 'down') {
-      const { data: self } = await supabase
-        .from('tasks')
-        .select('id, owner_id, position')
-        .eq('id', id)
-        .maybeSingle()
-      if (!self) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+    const { data: self } = await supabase
+      .from('tasks')
+      .select('id, owner_id, position')
+      .eq('id', id)
+      .maybeSingle()
+    if (!self) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+    if (!canAccessTaskOwner(auth, self.owner_id)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
+    if (body.move === 'up' || body.move === 'down') {
       const direction = body.move === 'up' ? 'desc' : 'asc'
       const cmp = body.move === 'up' ? 'lt' : 'gt'
 
@@ -84,6 +91,17 @@ export async function DELETE(
 
   const { id } = await params
   const supabase = getSupabaseAdmin()
+
+  const { data: task } = await supabase
+    .from('tasks')
+    .select('id, owner_id')
+    .eq('id', id)
+    .maybeSingle()
+  if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+  if (!canAccessTaskOwner(auth, task.owner_id)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const { error } = await supabase.from('tasks').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ deleted: true })

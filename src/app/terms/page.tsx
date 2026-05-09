@@ -37,7 +37,7 @@ export default function TermsAndConditions() {
           },
           {
             title: '7. Privacy',
-            body: 'Your personal information is handled in accordance with our Privacy Policy, available at https://family-planner-tawny.vercel.app/privacy. We do not sell or share your information with third parties for marketing purposes.'
+            body: 'Your personal information is handled in accordance with our Privacy Policy, available at /privacy. We do not sell or share your information with third parties for marketing purposes.'
           },
           {
             title: '8. Changes to These Terms',

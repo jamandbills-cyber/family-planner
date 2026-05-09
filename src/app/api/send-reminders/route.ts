@@ -4,9 +4,10 @@ import { authOptions } from '@/lib/auth'
 import { google } from 'googleapis'
 import { sendSMS } from '@/lib/twilio'
 import { sendEmail } from '@/lib/gmail'
+import { getAppUrl } from '@/lib/app-url'
+import { requireAdminMember } from '@/lib/auth-helpers'
 
 const SHEETS_ID = process.env.GOOGLE_SHEETS_ID!
-const APP_URL   = process.env.NEXTAUTH_URL ?? 'https://family-planner-tawny.vercel.app'
 
 function getServiceClient() {
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
@@ -19,6 +20,9 @@ function getServiceClient() {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAdminMember()
+  if (auth.response) return auth.response
+
   const session = await getServerSession(authOptions)
   if (!session?.accessToken) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -53,6 +57,7 @@ export async function POST(req: NextRequest) {
       spreadsheetId: SHEETS_ID, range: 'Tokens!A2:E500',
     })
     const tokenRows = (tokenRes.data.values ?? []) as string[][]
+    const appUrl = getAppUrl(req)
 
     // Find everyone who hasn't submitted
     const notSubmitted = members.filter(m => !submittedIds.has(m.id))
@@ -66,7 +71,7 @@ export async function POST(req: NextRequest) {
     for (const member of notSubmitted) {
       const formType = member.type === 'child' ? 'kid' : 'adult'
       const tokenRow = tokenRows.find(r => r[1] === member.id && r[2] === weekStart && r[3] === formType)
-      const formUrl  = tokenRow ? `${APP_URL}/form/${formType}/${tokenRow[0]}` : APP_URL
+      const formUrl  = tokenRow ? `${appUrl}/form/${formType}/${tokenRow[0]}` : appUrl
 
       const msg = `Hey ${member.name}! Reminder — please fill out the family weekly planner before the deadline:\n${formUrl}`
 

@@ -1,4 +1,5 @@
 import 'server-only'
+import { NextResponse } from 'next/server'
 import { getSupabaseServer } from './supabase'
 
 export type CurrentMember = {
@@ -23,4 +24,29 @@ export async function getCurrentMember(): Promise<CurrentMember | null> {
     .single()
 
   return member ?? null
+}
+
+export function unauthorizedResponse() {
+  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+}
+
+export function forbiddenResponse() {
+  return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+}
+
+type MemberAuthResult =
+  | { member: CurrentMember; response?: never }
+  | { member?: never; response: NextResponse }
+
+export async function requireCurrentMember(): Promise<MemberAuthResult> {
+  const member = await getCurrentMember()
+  if (!member) return { response: unauthorizedResponse() }
+  return { member }
+}
+
+export async function requireAdminMember(): Promise<MemberAuthResult> {
+  const auth = await requireCurrentMember()
+  if (auth.response) return auth
+  if (auth.member.role !== 'admin') return { response: forbiddenResponse() }
+  return auth
 }

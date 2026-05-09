@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getWeekCalendarEvents } from '@/lib/google-calendar'
+import { requireAdminMember } from '@/lib/auth-helpers'
 import { addWeeks, format } from 'date-fns'
 
 export async function GET(req: NextRequest) {
+  const auth = await requireAdminMember()
+  if (auth.response) return auth.response
+
   const session = await getServerSession(authOptions)
   if (!session?.accessToken) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
