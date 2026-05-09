@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { google } from 'googleapis'
 
 export const dynamic = 'force-dynamic'
-
-const SHEETS_ID = process.env.GOOGLE_SHEETS_ID
 
 type DinnerRow = { dayIdx: number; meal: string; cook: string }
 
@@ -36,34 +33,8 @@ async function tryReadFromSupabase(weekStart: string): Promise<DinnerRow[] | nul
   }
 }
 
-async function tryReadFromSheets(weekStart: string): Promise<DinnerRow[] | null> {
-  if (!SHEETS_ID || !process.env.GOOGLE_SERVICE_ACCOUNT_KEY) return null
-  try {
-    const key = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY)
-    const auth = new google.auth.GoogleAuth({
-      credentials: key,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-    })
-    const sheets = google.sheets({ version: 'v4', auth })
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEETS_ID,
-      range: 'AdminState!A2:C200',
-    })
-    const rows = (res.data.values ?? []) as string[][]
-    const matching = rows
-      .filter(r => r[0] === weekStart)
-      .sort((a, b) => (b[1] ?? '').localeCompare(a[1] ?? ''))
-    if (matching.length === 0) return null
-    const state = JSON.parse(matching[0][2])
-    return Array.isArray(state?.dinner) ? state.dinner : null
-  } catch {
-    return null
-  }
-}
-
 export async function GET() {
   const weekStart = getCurrentWeekStart()
-  const fromSb = await tryReadFromSupabase(weekStart)
-  const dinner = fromSb ?? await tryReadFromSheets(weekStart) ?? []
+  const dinner = await tryReadFromSupabase(weekStart) ?? []
   return NextResponse.json({ dinner, weekStart })
 }

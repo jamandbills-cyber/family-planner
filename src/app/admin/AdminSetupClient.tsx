@@ -7,7 +7,6 @@ import {
   Clock, ChevronDown, ChevronUp, Undo2, Send, Loader2, LogOut
 } from 'lucide-react'
 import type { CalendarEvent, DinnerEntry } from '@/lib/types'
-import { FAMILY_MEMBERS } from '@/lib/family'
 
 // ─── Week display helpers ─────────────────────────────────────
 const WEEK_LABELS = [
@@ -589,8 +588,8 @@ export default function AdminSetupClient() {
   const [weekStartKey,setWeekStartKey]= useState<string | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // ─── Family members — start with family.ts, upgrade from Sheet ──
-  const [familyMembers,  setFamilyMembers]  = useState<any[]>(FAMILY_MEMBERS)
+  // ─── Family members — Supabase roster is the source of truth ──
+  const [familyMembers,  setFamilyMembers]  = useState<any[]>([])
   const [schoolConfig,   setSchoolConfig]   = useState(DEFAULT_SCHOOL)
   const ADULTS     = familyMembers.filter(m => m.type === 'adult')
   const KIDS       = familyMembers.filter(m => m.type === 'child')

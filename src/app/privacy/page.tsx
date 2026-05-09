@@ -29,11 +29,11 @@ export default function PrivacyPolicy() {
           },
           {
             title: '5. Data Storage',
-            body: 'Information is stored in a private Google Sheet accessible only to the application administrator. Calendar data is read from a private Google Calendar. No data is sold, shared, or transmitted to any third party. Data is not used for advertising or marketing purposes of any kind.'
+            body: 'Information is stored in Supabase and is accessible only through the family planner application and administrator tools. Calendar data is read from a private Google Calendar. No data is sold, shared, or transmitted to any third party for advertising or marketing purposes.'
           },
           {
             title: '6. Data Sharing',
-            body: 'We do not sell, trade, rent, or otherwise share personal information with third parties. The only external services used are:\n\n• Google (Calendar and Sheets APIs) — for storing and reading family scheduling data\n• Twilio — for delivering SMS notifications to family members\n• Vercel — for hosting the application\n\nEach of these services has its own privacy policy governing their handling of data.'
+            body: 'We do not sell, trade, rent, or otherwise share personal information with third parties. The only external services used are:\n\n• Supabase — for application authentication and data storage\n• Google Calendar — for reading and updating family calendar events\n• Twilio — for delivering SMS notifications to family members\n• Vercel — for hosting the application\n\nEach of these services has its own privacy policy governing their handling of data.'
           },
           {
             title: '7. Opt-Out',
@@ -41,7 +41,7 @@ export default function PrivacyPolicy() {
           },
           {
             title: '8. Data Retention',
-            body: 'Weekly planning submissions are retained in Google Sheets for reference purposes. Family members may request that their data be deleted at any time by contacting the application administrator.'
+            body: 'Weekly planning submissions and published plans are retained in Supabase for reference purposes. Family members may request that their data be deleted at any time by contacting the application administrator.'
           },
           {
             title: '9. Contact',

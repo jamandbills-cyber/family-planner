@@ -42,7 +42,7 @@ export interface DinnerEntry {
   cook: string
 }
 
-// ─── Admin setup state (saved to Google Sheets / DB) ──────────
+// ─── Admin setup state (saved to Supabase) ────────────────────
 export interface AdminSetupData {
   weekStart: string           // ISO date string "YYYY-MM-DD" (Monday)
   events: CalendarEvent[]

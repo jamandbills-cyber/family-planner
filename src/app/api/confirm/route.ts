@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { savePlan, getFamilyMembers } from '@/lib/sheets'
 import { sendEmail, buildWeeklyPlanEmail } from '@/lib/gmail'
 import { sendSMS } from '@/lib/twilio'
 import { getAppUrl } from '@/lib/app-url'
 import { requireAdminMember } from '@/lib/auth-helpers'
+import { getPlanningMembers, publishPlanningPlan } from '@/lib/planning-data'
 import { google } from 'googleapis'
 
 export async function POST(req: NextRequest) {
@@ -26,12 +26,12 @@ export async function POST(req: NextRequest) {
     const accessToken = session.accessToken
     const results: Record<string, any> = {}
 
-    // 1. Save plan to Sheets
-    await savePlan(accessToken, weekStart, plan)
+    // 1. Publish plan to Supabase
+    await publishPlanningPlan(weekStart, plan)
     results.planSaved = true
 
     // 2. Get family members
-    const members = await getFamilyMembers(accessToken)
+    const members = await getPlanningMembers()
     const adults  = members.filter(m => m.type === 'adult')
 
     // 3. Email all adults

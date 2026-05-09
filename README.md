@@ -1,12 +1,12 @@
 # Family Planner
 
-Weekly family planning app with Supabase-backed dashboards, Google Calendar/Sheets workflows, tokenized forms, device dashboards, and Vercel cron jobs.
+Weekly family planning app with Supabase-backed dashboards, Sunday planning, tokenized forms, device dashboards, Google Calendar integration, and Vercel cron jobs.
 
 ## Tech Stack
 
 - **Next.js 15** App Router, React 19, TypeScript
 - **Supabase** for Auth, Postgres data, and photo storage
-- **NextAuth** with Google OAuth for Google Calendar/Sheets/Gmail access in the Sunday planning flow
+- **NextAuth** with Google OAuth for Google Calendar and Gmail access in the Sunday planning flow
 - **Tailwind CSS** for styling
 - **Twilio** for SMS form links
 - **Vercel** for hosting and cron
@@ -28,7 +28,7 @@ npm run dev
 
 ## Supabase
 
-The app expects these public-schema tables: `family_members`, `projects`, `tasks`, `ideas`, `captures`, `device_tokens`, and `sunday_plans`. Local migrations live in `supabase/migrations`.
+The app expects these public-schema tables: `family_members`, `projects`, `tasks`, `ideas`, `captures`, `device_tokens`, `sunday_plans`, `form_tokens`, `form_submissions`, and `published_plans`. Local migrations live in `supabase/migrations`.
 
 Admin authorization is based on the linked Supabase family member row:
 
@@ -37,9 +37,11 @@ Admin authorization is based on the linked Supabase family member row:
 
 ## Google Access
 
-Supabase controls app/admin membership. The Sunday planning flow also requires Google OAuth because it reads/writes Google Calendar and Sheets and may send Gmail messages.
+Supabase controls app/admin membership. The Sunday planning flow also requires Google OAuth because it reads/writes Google Calendar and may send Gmail messages.
 
 `ADMIN_EMAILS` is a Google OAuth allowlist. If it is empty, Google sign-in is denied.
+
+Google Sheets is no longer the runtime source of truth for roster, form tokens, submissions, or published plans. Those live in Supabase; Google remains an integration for Calendar and Gmail.
 
 ## Public Surfaces
 
@@ -52,7 +54,7 @@ Writes and admin operations are protected by Supabase admin role checks, scoped 
 1. Add all `.env.example` values to Vercel.
 2. Set `NEXTAUTH_URL` to the deployed URL.
 3. Add the deployed Google OAuth callback URL: `https://your-app.vercel.app/api/auth/callback/google`.
-4. Share the Google Sheet with the service account email from `GOOGLE_SERVICE_ACCOUNT_KEY`.
+4. Share the Google Calendar with the service account email from `GOOGLE_SERVICE_ACCOUNT_KEY`.
 5. Deploy.
 
 ## Useful Commands

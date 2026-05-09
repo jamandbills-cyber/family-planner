@@ -1,23 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { google } from 'googleapis'
 import { sendSMS } from '@/lib/twilio'
 import { sendEmail } from '@/lib/gmail'
 import { getAppUrl } from '@/lib/app-url'
 import { requireAdminMember } from '@/lib/auth-helpers'
-
-const SHEETS_ID = process.env.GOOGLE_SHEETS_ID!
-
-function getServiceClient() {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
-  if (!raw) throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY not set')
-  const auth = new google.auth.GoogleAuth({
-    credentials: JSON.parse(raw),
-    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-  })
-  return google.sheets({ version: 'v4', auth })
-}
+import { getLatestPlanningSubmissions, getPlanningMembers, getPlanningTokensForWeek } from '@/lib/planning-data'
 
 export async function POST(req: NextRequest) {
   const auth = await requireAdminMember()
@@ -32,31 +20,12 @@ export async function POST(req: NextRequest) {
     const { weekStart } = await req.json()
     if (!weekStart) return NextResponse.json({ error: 'weekStart required' }, { status: 400 })
 
-    const sheets = getServiceClient()
-
-    // Get family members
-    const famRes = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEETS_ID, range: 'Family!A2:G100',
-    })
-    const members = (famRes.data.values ?? []).filter(r => r[0]).map(r => ({
-      id: r[0], name: r[1], type: r[2], phone: r[3], email: r[4], color: r[5],
-    }))
-
-    // Get submissions
-    const subRes = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEETS_ID, range: 'Submissions!A2:E1000',
-    })
-    const submittedIds = new Set(
-      (subRes.data.values ?? [])
-        .filter(r => r[3] === weekStart)
-        .map(r => r[1])
-    )
-
-    // Get tokens for form links
-    const tokenRes = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEETS_ID, range: 'Tokens!A2:E500',
-    })
-    const tokenRows = (tokenRes.data.values ?? []) as string[][]
+    const [members, submissions, tokens] = await Promise.all([
+      getPlanningMembers(),
+      getLatestPlanningSubmissions(weekStart),
+      getPlanningTokensForWeek(weekStart),
+    ])
+    const submittedIds = new Set(submissions.map(s => s.memberId))
     const appUrl = getAppUrl(req)
 
     // Find everyone who hasn't submitted
@@ -70,8 +39,8 @@ export async function POST(req: NextRequest) {
 
     for (const member of notSubmitted) {
       const formType = member.type === 'child' ? 'kid' : 'adult'
-      const tokenRow = tokenRows.find(r => r[1] === member.id && r[2] === weekStart && r[3] === formType)
-      const formUrl  = tokenRow ? `${appUrl}/form/${formType}/${tokenRow[0]}` : appUrl
+      const tokenRow = tokens.find(t => t.memberId === member.id && t.formType === formType)
+      const formUrl  = tokenRow ? `${appUrl}/form/${formType}/${tokenRow.token}` : appUrl
 
       const msg = `Hey ${member.name}! Reminder — please fill out the family weekly planner before the deadline:\n${formUrl}`
 

@@ -122,7 +122,7 @@ export async function fetchWeekCalendar(weekOffset: number = 0): Promise<WeekRan
   }
   const wsJulian = julianDay(wsParts.year, wsParts.month, wsParts.day)
 
-  // Sunday-Plan state now lives in Supabase, not Google Sheets
+  // Sunday-plan state lives in Supabase.
   const adminState = await getSundayPlan(weekStartStr)
   const savedEvents: any[] = adminState?.events ?? []
 

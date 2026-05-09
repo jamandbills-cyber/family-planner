@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import {
-  getFamilyMembers,
-  getFamilyMembersWithServiceAccount,
-  saveTokens,
-  saveTokensWithServiceAccount,
-} from '@/lib/sheets'
 import { generateWeekTokens } from '@/lib/tokens'
 import { sendBulkSMS } from '@/lib/twilio'
 import { requireAdminMember } from '@/lib/auth-helpers'
 import { isValidInternalRequest } from '@/lib/internal-auth'
 import { getAppUrl } from '@/lib/app-url'
+import { getPlanningMembers, savePlanningTokens } from '@/lib/planning-data'
 
 export async function POST(req: NextRequest) {
   const isInternal = isValidInternalRequest(req)
@@ -26,31 +19,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'weekStart required' }, { status: 400 })
     }
 
-    const session = isInternal ? null : await getServerSession(authOptions)
-
-    // 1. Get family members from Google Sheets
-    const members = session?.accessToken
-      ? await getFamilyMembers(session.accessToken)
-      : await getFamilyMembersWithServiceAccount()
+    // 1. Get family members from Supabase
+    const members = await getPlanningMembers()
     if (members.length === 0) {
-      return NextResponse.json({ error: 'No family members found in sheet' }, { status: 400 })
+      return NextResponse.json({ error: 'No family members found' }, { status: 400 })
     }
 
     // 2. Generate tokens for everyone
     const tokens = generateWeekTokens(members, weekStart)
 
-    // 3. Save tokens to Google Sheets
+    // 3. Save tokens to Supabase
     const tokenRows = tokens.map(t => ({
       token:     t.token,
       memberId:  t.memberId,
       weekStart: t.weekStart,
       formType:  t.formType,
     }))
-    if (session?.accessToken) {
-      await saveTokens(session.accessToken, tokenRows)
-    } else {
-      await saveTokensWithServiceAccount(tokenRows)
-    }
+    await savePlanningTokens(tokenRows)
 
     // 4. Build SMS messages
     const messages = tokens

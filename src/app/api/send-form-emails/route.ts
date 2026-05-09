@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getFamilyMembers, saveTokens } from '@/lib/sheets'
 import { generateWeekTokens } from '@/lib/tokens'
 import { sendEmail } from '@/lib/gmail'
-import { FAMILY_MEMBERS } from '@/lib/family'
 import { getAppUrl } from '@/lib/app-url'
 import { requireAdminMember } from '@/lib/auth-helpers'
+import { getPlanningMembers, savePlanningTokens } from '@/lib/planning-data'
 
 export async function POST(req: NextRequest) {
   const auth = await requireAdminMember()
@@ -26,28 +25,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
   }
 
-  // Get members — fall back to family.ts if sheet fails
-  let members: any[] = []
-  try {
-    const sheetMembers = await getFamilyMembers(session.accessToken)
-    members = sheetMembers.length > 0 ? sheetMembers : FAMILY_MEMBERS
-  } catch {
-    members = FAMILY_MEMBERS
-  }
+  const members = await getPlanningMembers()
 
   if (members.length === 0) {
     return NextResponse.json({ error: 'No family members found' }, { status: 400 })
   }
   const appUrl = getAppUrl(req)
 
-  // Generate tokens and save to sheet
+  // Generate tokens and save to Supabase
   const tokens = generateWeekTokens(members, weekStart)
   try {
-    await saveTokens(session.accessToken, tokens.map(t => ({
+    await savePlanningTokens(tokens.map(t => ({
       token: t.token, memberId: t.memberId, weekStart: t.weekStart, formType: t.formType,
     })))
   } catch (err) {
     console.error('Token save failed:', err)
+    return NextResponse.json({ error: 'Could not save form links' }, { status: 500 })
   }
 
   // Send emails

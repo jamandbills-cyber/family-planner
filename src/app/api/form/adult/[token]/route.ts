@@ -1,31 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getWeekRange } from '@/lib/google-calendar'
-import { google } from 'googleapis'
 import { format } from 'date-fns'
 import { getSundayPlan } from '@/lib/sunday-plan'
-
-const SHEETS_ID = process.env.GOOGLE_SHEETS_ID!
+import { getPlanningToken } from '@/lib/planning-data'
 const DAY_MAP: Record<number, string> = { 1:'Monday', 2:'Tuesday', 3:'Wednesday', 4:'Thursday', 5:'Friday' }
-
-function getServiceClient() {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
-  if (!raw) throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY not set')
-  const key = JSON.parse(raw)
-  const auth = new google.auth.GoogleAuth({
-    credentials: key,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-  })
-  return google.sheets({ version: 'v4', auth })
-}
-
-async function readSheet(range: string): Promise<string[][]> {
-  const sheets = getServiceClient()
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: SHEETS_ID,
-    range,
-  })
-  return (res.data.values ?? []) as string[][]
-}
 
 export async function GET(
   req: NextRequest,
@@ -34,27 +12,12 @@ export async function GET(
   const { token } = await params
 
   try {
-    const tokenRows = await readSheet('Tokens!A2:E500')
-    const tokenRow  = tokenRows.find(r => r[0] === token)
-    if (!tokenRow || tokenRow[3] !== 'adult') {
+    const tokenRecord = await getPlanningToken(token, 'adult')
+    if (!tokenRecord) {
       return NextResponse.json({ error: 'Invalid or expired link' }, { status: 404 })
     }
-    const memberId  = tokenRow[1]
-    const weekStart = tokenRow[2]
-
-    const familyRows = await readSheet('Family!A2:F100')
-    const memberRow  = familyRows.find(r => r[0] === memberId)
-    if (!memberRow) {
-      return NextResponse.json({ error: 'Member not found' }, { status: 404 })
-    }
-    const member = {
-      id:    memberRow[0],
-      name:  memberRow[1],
-      type:  memberRow[2],
-      phone: memberRow[3],
-      email: memberRow[4],
-      color: memberRow[5] ?? '#8B8599',
-    }
+    const member = tokenRecord.member
+    const weekStart = tokenRecord.weekStart
 
     // Load admin state from Supabase
     const planState = await getSundayPlan(weekStart)
