@@ -161,7 +161,13 @@ export default function KidFormPage() {
                           }}>
                             <div style={{ fontWeight: yours ? 700 : 500, color:'#1A1A2E', lineHeight:1.3 }}>{evt.title}</div>
                             <div style={{ color:'#8B8599', marginTop:1 }}>{evt.time}</div>
-                            {evt.driver && (
+                            {evt.transportType === 'both' && (evt.dropoffDriver || evt.pickupDriver) && (
+                              <div style={{ color:'#C4522A', marginTop:2, fontWeight:600 }}>
+                                {evt.dropoffDriver && <div>Drop: {evt.dropoffDriver}</div>}
+                                {evt.pickupDriver && <div>Pick: {evt.pickupDriver}</div>}
+                              </div>
+                            )}
+                            {evt.transportType !== 'both' && evt.driver && (
                               <div style={{ color:'#C4522A', marginTop:2, fontWeight:600 }}>🚗 {evt.driver}</div>
                             )}
                           </div>

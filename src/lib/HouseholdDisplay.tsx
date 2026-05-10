@@ -215,7 +215,17 @@ function TodayPanel({ data, now, theme }: {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(4px, 0.6vh, 8px)', overflow: 'hidden', flex: 1, minHeight: 0 }}>
           {preview.events.map(e => {
-            const driver = e.driverId ? memberById.get(e.driverId)?.display_name : null
+            const driver = e.transportType === 'both'
+              ? [
+                  e.dropoffDriverId || e.driverId ? `drop: ${memberById.get((e.dropoffDriverId ?? e.driverId)!)?.display_name ?? 'carpool'}` : null,
+                  e.pickupDriverId || e.driverId ? `pick: ${memberById.get((e.pickupDriverId ?? e.driverId)!)?.display_name ?? 'carpool'}` : null,
+                ].filter(Boolean).join(' · ')
+              : e.driverId ? memberById.get(e.driverId)?.display_name : null
+            const needsDriver = e.transportStatus === 'needs_driver' && (
+              e.transportType === 'both'
+                ? !(e.dropoffDriverId ?? e.driverId) || !(e.pickupDriverId ?? e.driverId)
+                : !e.driverId
+            )
             const needed = e.involvedIds?.map(id => memberById.get(id)?.display_name).filter(Boolean).join(', ')
             return (
               <div key={e.id} style={{ display: 'flex', gap: 6, fontSize: 'clamp(10px, 0.85vw, 13px)', lineHeight: 1.25, minWidth: 0 }}>
@@ -223,7 +233,7 @@ function TodayPanel({ data, now, theme }: {
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ color: theme.subtext, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                     {e.allDay ? 'all day' : formatTime(e.startMinutes)}
-                    {driver ? ` · ${driver}` : e.transportStatus === 'needs_driver' ? ' · needs driver' : ''}
+                    {driver ? ` · ${driver}` : needsDriver ? ' · needs driver' : ''}
                   </div>
                   <div style={{ color: theme.text, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {e.title}

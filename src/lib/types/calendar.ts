@@ -14,6 +14,8 @@ export type DashboardCalendarEvent = {
   // Sunday Plan metadata, merged in from AdminState
   involvedIds?: string[]
   driverId?: string | null
+  dropoffDriverId?: string | null
+  pickupDriverId?: string | null
   transportStatus?: 'unset' | 'needs_driver' | 'no_transport' | 'assigned'
   transportType?: 'ride' | 'dropoff' | 'pickup' | 'both'
   carpoolNote?: string

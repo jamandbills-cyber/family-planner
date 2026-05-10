@@ -100,10 +100,34 @@ export default function MeetingPage() {
 
   const getMemberName = (memberList, id) => memberList.find(m => m.id === id)?.name ?? id
   const getMember = id => members.find(m => m.id === id)
+  const driverForTransport = (evt, slot) => {
+    if (slot === 'dropoff') return evt.dropoffDriverId ?? evt.driverId ?? null
+    return evt.pickupDriverId ?? evt.driverId ?? null
+  }
+  const isTransportCovered = evt => {
+    if (evt.transportStatus !== 'needs_driver') return true
+    if (evt.transportType === 'both') {
+      return !!driverForTransport(evt, 'dropoff') && !!driverForTransport(evt, 'pickup')
+    }
+    return !!(evt.driverId ?? evt.dropoffDriverId ?? evt.pickupDriverId)
+  }
+  const driverSummary = evt => {
+    if (evt.transportType === 'both') {
+      const drop = getMember(driverForTransport(evt, 'dropoff'))?.name
+      const pick = getMember(driverForTransport(evt, 'pickup'))?.name
+      return [drop ? `Drop: ${drop}` : null, pick ? `Pick: ${pick}` : null].filter(Boolean).join(' · ')
+    }
+    return getMember(evt.driverId ?? evt.dropoffDriverId ?? evt.pickupDriverId)?.name ?? ''
+  }
 
-  const assignDriver = (eventId, val) => {
+  const assignDriver = (eventId, val, slot) => {
     setEvents(evs => {
-      const updated = evs.map(e => e.id === eventId ? { ...e, driverId: val || null } : e)
+      const updated = evs.map(e => {
+        if (e.id !== eventId) return e
+        if (slot === 'dropoff') return { ...e, dropoffDriverId: val || null }
+        if (slot === 'pickup') return { ...e, pickupDriverId: val || null }
+        return { ...e, driverId: val || null }
+      })
       // Auto-save assignments back to AdminState
       if (weekStart) {
         fetch('/api/admin-state', {
@@ -161,7 +185,7 @@ export default function MeetingPage() {
           title:    e.title,
           time:     e.time,
           location: e.location ?? '',
-          driver:   getMember(e.driverId)?.name ?? '',
+          driver:   driverSummary(e),
           transportNote: e.transportStatus === 'no_transport' ? 'No transport needed' : '',
         }))
       return { day, events: dayEvents }
@@ -215,7 +239,7 @@ export default function MeetingPage() {
     } catch (_) {}
   }
 
-  const gaps  = events.filter(e => e.transportStatus === 'needs_driver' && !e.driverId)
+  const gaps  = events.filter(e => e.transportStatus === 'needs_driver' && !isTransportCovered(e))
   const sel   = events.find(e => e.id === selectedEvt)
   const notSubmitted = members.filter(m => !submissions.find(s => s.memberId === m.id))
   const eventsByDay  = WEEK.map((_, i) => events.filter(e => e.dayIdx === i).sort((a, b) => (a.sortMin ?? 0) - (b.sortMin ?? 0)))
@@ -228,7 +252,7 @@ export default function MeetingPage() {
   }
 
   function chipStatus(evt) {
-    if (evt.transportStatus === 'needs_driver' && evt.driverId) return 'assigned'
+    if (evt.transportStatus === 'needs_driver' && isTransportCovered(evt)) return 'assigned'
     return evt.transportStatus ?? 'unset'
   }
 
@@ -385,13 +409,13 @@ export default function MeetingPage() {
                                   const status = chipStatus(evt)
                                   const sc = STATUS_COLORS[status] ?? STATUS_COLORS.unset
                                   const firstMember = members.find(m => m.id === evt.involvedIds?.[0])
-                                  const driver = members.find(m => m.id === evt.driverId)
+                                  const driver = driverSummary(evt)
                                   const isSchool = evt.id?.startsWith('school_')
                                   const isSchoolDrop = evt.id?.startsWith('school_drop_')
 
                                   // Get available adults for school events from submissions
                                   let schoolAvailable = []
-                                  if (isSchool && !evt.driverId) {
+                                  if (isSchool && !isTransportCovered(evt)) {
                                     const slot = isSchoolDrop ? 'am' : 'pm'
                                     schoolAvailable = submissions
                                       .filter(s => {
@@ -411,14 +435,14 @@ export default function MeetingPage() {
                                       <div style={{ fontSize:10, fontWeight:600, color:'#1A1A2E', lineHeight:1.3 }}>{evt.title}</div>
                                       <div style={{ fontSize:9, color:'#8B8599', marginTop:1 }}>{evt.time}</div>
                                       {evt.transportStatus === 'needs_driver' && (
-                                        <div style={{ fontSize:9, marginTop:2, color: evt.driverId?'#15803D':'#D97706', fontWeight:600 }}>
-                                          {evt.driverId ? `🚗 ${driver?.name}` : '⚠ No driver'}
+                                        <div style={{ fontSize:9, marginTop:2, color: isTransportCovered(evt)?'#15803D':'#D97706', fontWeight:600 }}>
+                                          {isTransportCovered(evt) ? `🚗 ${driver}` : '⚠ No driver'}
                                         </div>
                                       )}
                                       {evt.transportStatus === 'no_transport' && (
                                         <div style={{ fontSize:9, marginTop:2, color:'#15803D', fontWeight:500 }}>✓ No transport needed</div>
                                       )}
-                                      {isSchool && !evt.driverId && schoolAvailable.length > 0 && (
+                                      {isSchool && !isTransportCovered(evt) && schoolAvailable.length > 0 && (
                                         <div style={{ fontSize:9, marginTop:3, color:'#1D4ED8', fontWeight:600 }}>
                                           Available: {schoolAvailable.join(', ')}
                                         </div>
@@ -476,10 +500,12 @@ export default function MeetingPage() {
                                 response.dropoff !== true && response.pickup !== true
                               )
                               const noAnswer = response == null
-                              const assigned = sel.driverId === a.id
+                              const assigned = sel.transportType === 'both'
+                                ? driverForTransport(sel, 'dropoff') === a.id || driverForTransport(sel, 'pickup') === a.id
+                                : (sel.driverId ?? sel.dropoffDriverId ?? sel.pickupDriverId) === a.id
                               return (
                                 <div key={a.id}
-                                  onClick={() => assignDriver(sel.id, assigned ? null : a.id)}
+                                  onClick={() => sel.transportType === 'both' ? undefined : assignDriver(sel.id, assigned ? null : a.id)}
                                   style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:9, cursor:'pointer', transition:'all 0.12s',
                                     background: assigned ? a.color : canDrive ? 'rgba(74,222,128,0.1)' : cantDrive ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.06)',
                                     border: `1.5px solid ${assigned ? a.color : canDrive ? 'rgba(74,222,128,0.3)' : cantDrive ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.1)'}`,
@@ -492,11 +518,25 @@ export default function MeetingPage() {
                                   {!assigned && canDrive  && <span style={{ fontSize:11, color:'#4ADE80', fontWeight:600 }}>✓ {responseLabel || 'Available'}</span>}
                                   {!assigned && cantDrive && <span style={{ fontSize:11, color:'rgba(239,68,68,0.7)', fontWeight:500 }}>✗ Not available</span>}
                                   {!assigned && noAnswer  && <span style={{ fontSize:11, color:'rgba(255,255,255,0.3)', fontStyle:'italic' }}>No response</span>}
+                                  {sel.transportType === 'both' && (
+                                    <span style={{ display:'flex', gap:5 }}>
+                                      <button onClick={e => { e.stopPropagation(); assignDriver(sel.id, driverForTransport(sel, 'dropoff') === a.id ? null : a.id, 'dropoff') }}
+                                        style={{ fontSize:10, padding:'3px 7px', borderRadius:5, border:'none', cursor:'pointer', background: driverForTransport(sel, 'dropoff') === a.id ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)', color:'#fff', fontWeight:700 }}>
+                                        Drop
+                                      </button>
+                                      <button onClick={e => { e.stopPropagation(); assignDriver(sel.id, driverForTransport(sel, 'pickup') === a.id ? null : a.id, 'pickup') }}
+                                        style={{ fontSize:10, padding:'3px 7px', borderRadius:5, border:'none', cursor:'pointer', background: driverForTransport(sel, 'pickup') === a.id ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)', color:'#fff', fontWeight:700 }}>
+                                        Pick
+                                      </button>
+                                    </span>
+                                  )}
                                 </div>
                               )
                             })}
                           </div>
-                          <p style={{ fontSize:11, color:'rgba(255,255,255,0.3)', marginTop:10, fontStyle:'italic' }}>Tap a person to assign or unassign them as driver.</p>
+                          <p style={{ fontSize:11, color:'rgba(255,255,255,0.3)', marginTop:10, fontStyle:'italic' }}>
+                            {sel.transportType === 'both' ? 'Use Drop and Pick to assign each leg.' : 'Tap a person to assign or unassign them as driver.'}
+                          </p>
                         </div>
                       ) : (
                         <div style={{ fontSize:13, color:'rgba(255,255,255,0.4)', fontStyle:'italic' }}>

@@ -94,6 +94,8 @@ function savedEventToDashboard(
     endMinutes,
     involvedIds: saved.involvedIds ?? [],
     driverId: saved.driverId ?? null,
+    dropoffDriverId: saved.dropoffDriverId ?? null,
+    pickupDriverId: saved.pickupDriverId ?? null,
     transportStatus: saved.transportStatus ?? 'unset',
     transportType: saved.transportType ?? 'ride',
     carpoolNote: saved.carpoolNote ?? '',
@@ -198,6 +200,8 @@ export async function fetchWeekCalendar(weekOffset: number = 0): Promise<WeekRan
         endMinutes,
         involvedIds: [],
         driverId: null,
+        dropoffDriverId: null,
+        pickupDriverId: null,
         transportStatus: 'unset',
         transportType: 'ride',
         isSchoolEvent: false,
@@ -209,6 +213,8 @@ export async function fetchWeekCalendar(weekOffset: number = 0): Promise<WeekRan
       if (saved) {
         evt.involvedIds = saved.involvedIds ?? []
         evt.driverId = saved.driverId ?? null
+        evt.dropoffDriverId = saved.dropoffDriverId ?? null
+        evt.pickupDriverId = saved.pickupDriverId ?? null
         evt.transportStatus = saved.transportStatus ?? 'unset'
         evt.transportType = saved.transportType ?? 'ride'
         evt.carpoolNote = saved.carpoolNote ?? ''

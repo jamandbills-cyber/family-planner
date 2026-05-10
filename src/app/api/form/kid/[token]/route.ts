@@ -29,14 +29,19 @@ export async function GET(
     for (let i = 0; i < 7; i++) eventsByDay[i] = []
     for (const e of adminEvents) {
       if (e.dayIdx === undefined) continue
+      const transportType = e.transportType ?? 'ride'
+      const dropoffDriver = allMembers.find(m => m.id === (e.dropoffDriverId ?? (transportType === 'both' || transportType === 'dropoff' ? e.driverId : null)))?.name ?? ''
+      const pickupDriver = allMembers.find(m => m.id === (e.pickupDriverId ?? (transportType === 'both' || transportType === 'pickup' ? e.driverId : null)))?.name ?? ''
       eventsByDay[e.dayIdx].push({
         id:      e.id,
         title:   e.title,
         time:    e.time,
         sortMin: e.sortMin ?? 0,
-        transportType: e.transportType ?? 'ride',
+        transportType,
         isYours: (e.involvedIds ?? []).includes(member.id),
         driver:  allMembers.find(m => m.id === e.driverId)?.name ?? '',
+        dropoffDriver,
+        pickupDriver,
       })
     }
 

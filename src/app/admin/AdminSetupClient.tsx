@@ -27,8 +27,22 @@ const STATUS_META = {
 }
 
 function resolvedStatus(evt: CalendarEvent) {
-  if (evt.transportStatus === 'needs_driver' && evt.driverId) return 'assigned'
+  if (evt.transportStatus === 'needs_driver' && isTransportCovered(evt)) return 'assigned'
   return evt.transportStatus
+}
+
+function driverForTransport(evt: CalendarEvent, slot: 'dropoff' | 'pickup') {
+  return slot === 'dropoff'
+    ? evt.dropoffDriverId ?? evt.driverId ?? null
+    : evt.pickupDriverId ?? evt.driverId ?? null
+}
+
+function isTransportCovered(evt: CalendarEvent) {
+  if (evt.transportStatus !== 'needs_driver') return true
+  if (evt.transportType === 'both') {
+    return !!driverForTransport(evt, 'dropoff') && !!driverForTransport(evt, 'pickup')
+  }
+  return !!evt.driverId || !!evt.dropoffDriverId || !!evt.pickupDriverId
 }
 
 // ─── School kids who attend school Mon–Fri ───────────────────
@@ -263,18 +277,26 @@ function PreviewPlan({ events, dinner, agenda, weekLabel, members }: any) {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {dayEvts.map((evt: any) => {
                         const driver = members.find((m: any) => m.id === evt.driverId)
+                        const dropoffDriver = members.find((m: any) => m.id === driverForTransport(evt, 'dropoff'))
+                        const pickupDriver = members.find((m: any) => m.id === driverForTransport(evt, 'pickup'))
+                        const hasBoth = evt.transportType === 'both'
                         return (
                           <div key={evt.id} style={{ display: 'flex', gap: 10, padding: '8px 12px', background: '#FAFAF7', borderRadius: 8, border: '1px solid #EDE8E0', borderLeft: `3px solid ${evt.transportStatus === 'needs_driver' ? '#C4522A' : '#E2DDD6'}` }}>
                             <div style={{ flex: 1 }}>
                               <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A2E' }}>{evt.title}</div>
                               <div style={{ fontSize: 12, color: '#8B8599' }}>{evt.time}</div>
                             </div>
-                            {driver && (
+                            {hasBoth ? (
+                              <div style={{ fontSize: 12, color: '#C4522A', fontWeight: 600, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                                {dropoffDriver && <span>Drop: {dropoffDriver.name}</span>}
+                                {pickupDriver && <span>Pick: {pickupDriver.name}</span>}
+                              </div>
+                            ) : driver && (
                               <div style={{ fontSize: 12, color: '#C4522A', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                                 🚗 {driver.name}
                               </div>
                             )}
-                            {evt.transportStatus === 'needs_driver' && !driver && (
+                            {evt.transportStatus === 'needs_driver' && !isTransportCovered(evt) && (
                               <div style={{ fontSize: 11, color: '#D97706', fontWeight: 600 }}>⚠ No driver</div>
                             )}
                           </div>
@@ -303,10 +325,10 @@ function PreviewPlan({ events, dinner, agenda, weekLabel, members }: any) {
               )}
 
               {/* Transport gaps */}
-              {events.filter((e: any) => e.transportStatus === 'needs_driver' && !e.driverId).length > 0 && (
+              {events.filter((e: any) => e.transportStatus === 'needs_driver' && !isTransportCovered(e)).length > 0 && (
                 <div style={{ padding: '12px 16px', background: '#FFFBEB', borderRadius: 9, border: '1px solid #FDE68A' }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#92400E', marginBottom: 4 }}>⚠ Still needs drivers:</div>
-                  {events.filter((e: any) => e.transportStatus === 'needs_driver' && !e.driverId).map((e: any) => (
+                  {events.filter((e: any) => e.transportStatus === 'needs_driver' && !isTransportCovered(e)).map((e: any) => (
                     <div key={e.id} style={{ fontSize: 12, color: '#B45309', marginBottom: 2 }}>• {e.title} ({WEEK[e.dayIdx]} {e.time})</div>
                   ))}
                 </div>
@@ -715,7 +737,9 @@ export default function AdminSetupClient() {
           if (saved && (
             saved.involvedIds?.length > 0 ||
             saved.transportStatus !== 'unset' ||
-            saved.driverId
+            saved.driverId ||
+            saved.dropoffDriverId ||
+            saved.pickupDriverId
           )) {
             return {
               ...evt,
@@ -723,6 +747,8 @@ export default function AdminSetupClient() {
               transportStatus: saved.transportStatus ?? evt.transportStatus,
               transportType:   saved.transportType   ?? evt.transportType ?? 'ride',
               driverId:        saved.driverId        ?? evt.driverId,
+              dropoffDriverId: saved.dropoffDriverId ?? evt.dropoffDriverId,
+              pickupDriverId:  saved.pickupDriverId  ?? evt.pickupDriverId,
               carpoolNote:     saved.carpoolNote     ?? evt.carpoolNote,
             }
           }
@@ -816,6 +842,8 @@ export default function AdminSetupClient() {
           transportStatus: 'needs_driver' as const,
           transportType: 'dropoff' as const,
           driverId: config.dropoffDriverId || null,
+          dropoffDriverId: config.dropoffDriverId || null,
+          pickupDriverId: null,
           standingRuleId: null,
           carpoolNote: '',
         })
@@ -833,6 +861,8 @@ export default function AdminSetupClient() {
           transportStatus: 'needs_driver' as const,
           transportType: 'pickup' as const,
           driverId: config.pickupDriverId || null,
+          dropoffDriverId: null,
+          pickupDriverId: config.pickupDriverId || null,
           standingRuleId: null,
           carpoolNote: '',
         })
@@ -866,22 +896,56 @@ export default function AdminSetupClient() {
   const setTransportStatus = (id: string, status: CalendarEvent['transportStatus']) =>
     setEvents(ev => {
       const updated = ev.map(e => e.id === id
-        ? { ...e, transportStatus: status, driverId: status !== 'needs_driver' ? null : e.driverId }
+        ? {
+            ...e,
+            transportStatus: status,
+            driverId: status !== 'needs_driver' ? null : e.driverId,
+            dropoffDriverId: status !== 'needs_driver' ? null : e.dropoffDriverId,
+            pickupDriverId: status !== 'needs_driver' ? null : e.pickupDriverId,
+          }
         : e)
       saveImmediately(updated)
       return updated
     })
 
-  const assignDriver = (eventId: string, val: string) =>
+  const assignDriver = (eventId: string, val: string, slot?: 'dropoff' | 'pickup') =>
     setEvents(ev => {
-      const updated = ev.map(e => e.id === eventId ? { ...e, driverId: val || null } : e)
+      const updated = ev.map(e => {
+        if (e.id !== eventId) return e
+        if (slot === 'dropoff') return { ...e, dropoffDriverId: val || null }
+        if (slot === 'pickup') return { ...e, pickupDriverId: val || null }
+        return { ...e, driverId: val || null }
+      })
       saveImmediately(updated)
       return updated
     })
 
   const setTransportType = (eventId: string, type: CalendarEvent['transportType']) =>
     setEvents(ev => {
-      const updated = ev.map(e => e.id === eventId ? { ...e, transportType: type ?? 'ride' } : e)
+      const updated = ev.map(e => {
+        if (e.id !== eventId) return e
+        const nextType = type ?? 'ride'
+        if (nextType === 'both') {
+          return {
+            ...e,
+            transportType: nextType,
+            dropoffDriverId: e.dropoffDriverId ?? e.driverId ?? null,
+            pickupDriverId: e.pickupDriverId ?? e.driverId ?? null,
+          }
+        }
+        const nextDriverId = nextType === 'dropoff'
+          ? e.dropoffDriverId ?? e.driverId ?? null
+          : nextType === 'pickup'
+          ? e.pickupDriverId ?? e.driverId ?? null
+          : e.driverId ?? e.dropoffDriverId ?? e.pickupDriverId ?? null
+        return {
+          ...e,
+          transportType: nextType,
+          driverId: nextDriverId,
+          dropoffDriverId: nextType === 'dropoff' ? nextDriverId : null,
+          pickupDriverId: nextType === 'pickup' ? nextDriverId : null,
+        }
+      })
       saveImmediately(updated)
       return updated
     })
@@ -910,7 +974,7 @@ export default function AdminSetupClient() {
   }
 
   // ─── Derived state ──────────────────────────────────────────
-  const gaps  = events.filter(e => e.transportStatus === 'needs_driver' && !e.driverId)
+  const gaps  = events.filter(e => e.transportStatus === 'needs_driver' && !isTransportCovered(e))
   const unset = events.filter(e => e.transportStatus === 'unset')
   const sel   = events.find(e => e.id === selectedId)
   const eventsByDay = WEEK_LABELS.map((_, i) =>
@@ -1214,14 +1278,35 @@ export default function AdminSetupClient() {
                         })}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <select value={sel.driverId ?? ''} onChange={e => assignDriver(sel.id, e.target.value)}
-                          style={{ ...s.select, background: '#fff', border: '1.5px solid rgba(255,255,255,0.4)', color: '#1A1A2E' }}>
-                          <option value="">— Assign driver —</option>
-                          {DRIVERS.map(a => (
-                            <option key={a.id} value={a.id} style={{ color: '#1A1A2E', background: '#fff' }}>{a.name}{a.type === 'child' ? ' (teen)' : ''}</option>
-                          ))}
-                          <option value="__carpool__" style={{ color: '#1A1A2E', background: '#fff' }}>Outside carpool</option>
-                        </select>
+                        {(sel.transportType ?? 'ride') === 'both' ? (
+                          <>
+                            <select value={driverForTransport(sel, 'dropoff') ?? ''} onChange={e => assignDriver(sel.id, e.target.value, 'dropoff')}
+                              style={{ ...s.select, background: '#fff', border: '1.5px solid rgba(255,255,255,0.4)', color: '#1A1A2E' }}>
+                              <option value="">— Drop-off driver —</option>
+                              {DRIVERS.map(a => (
+                                <option key={a.id} value={a.id} style={{ color: '#1A1A2E', background: '#fff' }}>{a.name}{a.type === 'child' ? ' (teen)' : ''}</option>
+                              ))}
+                              <option value="__carpool__" style={{ color: '#1A1A2E', background: '#fff' }}>Outside carpool</option>
+                            </select>
+                            <select value={driverForTransport(sel, 'pickup') ?? ''} onChange={e => assignDriver(sel.id, e.target.value, 'pickup')}
+                              style={{ ...s.select, background: '#fff', border: '1.5px solid rgba(255,255,255,0.4)', color: '#1A1A2E' }}>
+                              <option value="">— Pick-up driver —</option>
+                              {DRIVERS.map(a => (
+                                <option key={a.id} value={a.id} style={{ color: '#1A1A2E', background: '#fff' }}>{a.name}{a.type === 'child' ? ' (teen)' : ''}</option>
+                              ))}
+                              <option value="__carpool__" style={{ color: '#1A1A2E', background: '#fff' }}>Outside carpool</option>
+                            </select>
+                          </>
+                        ) : (
+                          <select value={sel.driverId ?? ''} onChange={e => assignDriver(sel.id, e.target.value)}
+                            style={{ ...s.select, background: '#fff', border: '1.5px solid rgba(255,255,255,0.4)', color: '#1A1A2E' }}>
+                            <option value="">— Assign driver —</option>
+                            {DRIVERS.map(a => (
+                              <option key={a.id} value={a.id} style={{ color: '#1A1A2E', background: '#fff' }}>{a.name}{a.type === 'child' ? ' (teen)' : ''}</option>
+                            ))}
+                            <option value="__carpool__" style={{ color: '#1A1A2E', background: '#fff' }}>Outside carpool</option>
+                          </select>
+                        )}
                         <input type="text" placeholder="Carpool note (optional)" value={sel.carpoolNote ?? ''}
                           onChange={e => updateCarpoolNote(sel.id, e.target.value)}
                           style={{ border: '1.5px solid rgba(255,255,255,0.18)', borderRadius: 6, padding: '6px 10px', fontSize: 12, background: 'rgba(255,255,255,0.07)', color: '#fff', width: 210, fontFamily: "'DM Sans',sans-serif" }} />

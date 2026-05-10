@@ -23,6 +23,8 @@ export interface CalendarEvent {
   transportStatus: TransportStatus
   transportType?: TransportType
   driverId?: string | null
+  dropoffDriverId?: string | null
+  pickupDriverId?: string | null
   standingRuleId?: string | null
   carpoolNote?: string
 }

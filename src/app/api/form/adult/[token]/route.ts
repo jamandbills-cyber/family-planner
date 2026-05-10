@@ -30,6 +30,17 @@ export async function GET(
     for (let i = 0; i < 7; i++) eventsByDay[i] = []
     for (const e of adminEvents) {
       if (e.dayIdx === undefined) continue
+      const transportType = e.transportType ?? 'ride'
+      const dropoffDriverId = e.dropoffDriverId ?? (transportType === 'both' || transportType === 'dropoff' ? e.driverId : null)
+      const pickupDriverId = e.pickupDriverId ?? (transportType === 'both' || transportType === 'pickup' ? e.driverId : null)
+      const needsDriver = e.transportStatus === 'needs_driver' && !e.id?.startsWith('school_') && (
+        transportType === 'both'
+          ? (!dropoffDriverId || !pickupDriverId)
+          : !e.driverId && !dropoffDriverId && !pickupDriverId
+      )
+      const amDriver = e.transportStatus === 'needs_driver' && !e.id?.startsWith('school_') && (
+        e.driverId === member.id || dropoffDriverId === member.id || pickupDriverId === member.id
+      )
       eventsByDay[e.dayIdx].push({
         id:              e.id,
         title:           e.title,
@@ -37,10 +48,12 @@ export async function GET(
         sortMin:         e.sortMin ?? 0,
         location:        e.location ?? '',
         transportStatus: e.transportStatus ?? 'unset',
-        transportType:   e.transportType ?? 'ride',
+        transportType,
         driverId:        e.driverId ?? null,
-        needsDriver:     e.transportStatus === 'needs_driver' && !e.driverId && !e.id?.startsWith('school_'),
-        amDriver:        e.transportStatus === 'needs_driver' && e.driverId === member.id && !e.id?.startsWith('school_'),
+        dropoffDriverId,
+        pickupDriverId,
+        needsDriver,
+        amDriver,
       })
     }
 

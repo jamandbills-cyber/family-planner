@@ -134,18 +134,18 @@ function eventBlockStyle(heightPct: number) {
     locSize:   'clamp(8px, 0.65vw, 10px)',
     pad:       '1px 4px',
     lineHeight: 1.05,
-    showLocation: false,
-    showChips: false,
-    showCarpoolNote: false,
+    showLocation: true,
+    showChips: true,
+    showCarpoolNote: true,
   }
   return {
     titleSize: 'clamp(8px, 0.65vw, 10px)',
     locSize:   'clamp(8px, 0.65vw, 10px)',
     pad:       '1px 3px',
     lineHeight: 1.05,
-    showLocation: false,
-    showChips: false,
-    showCarpoolNote: false,
+    showLocation: true,
+    showChips: true,
+    showCarpoolNote: true,
   }
 }
 
@@ -158,11 +158,9 @@ function ChipRow({ involvedIds, members, chipSize, chipFontSize, chipGap }: {
     .map(id => members.find(m => m.id === id))
     .filter((m): m is FamilyMemberColor => !!m)
   if (involved.length === 0) return null
-  const visible = involved.slice(0, 4)
-  const hiddenCount = involved.length - visible.length
   return (
-    <div style={{ display: 'flex', gap: chipGap, marginTop: 2, flexWrap: 'nowrap', overflow: 'hidden' }}>
-      {visible.map(m => (
+    <div style={{ display: 'flex', gap: chipGap, marginTop: 2, flexWrap: 'wrap', overflow: 'visible' }}>
+      {involved.map(m => (
         <div key={m.id} title={m.display_name} style={{
           width: chipSize as any, height: chipSize as any, borderRadius: '50%',
           background: m.color ?? '#888780', color: '#fff',
@@ -173,17 +171,6 @@ function ChipRow({ involvedIds, members, chipSize, chipFontSize, chipGap }: {
           {m.display_name[0].toUpperCase()}
         </div>
       ))}
-      {hiddenCount > 0 && (
-        <div title={`${hiddenCount} more`} style={{
-          minWidth: chipSize as any, height: chipSize as any, borderRadius: 999,
-          background: 'rgba(0,0,0,0.28)', color: '#fff',
-          fontSize: chipFontSize as any, fontWeight: 700,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '0 3px', flexShrink: 0,
-        }}>
-          +{hiddenCount}
-        </div>
-      )}
     </div>
   )
 }
@@ -280,7 +267,26 @@ export default function WeekCalendar({
   }, [members])
 
   const driverNameOf = (driverId: string | null | undefined) =>
-    driverId ? (memberById.get(driverId)?.display_name ?? null) : null
+    driverId ? (memberById.get(driverId)?.display_name ?? (driverId === '__carpool__' ? 'carpool' : null)) : null
+
+  const driverTextOf = (e: DashboardCalendarEvent) => {
+    if (e.transportType === 'both') {
+      const dropoff = driverNameOf(e.dropoffDriverId ?? e.driverId)
+      const pickup = driverNameOf(e.pickupDriverId ?? e.driverId)
+      return [dropoff ? `drop: ${dropoff}` : null, pickup ? `pick: ${pickup}` : null]
+        .filter(Boolean)
+        .join(' · ')
+    }
+    return driverNameOf(e.driverId ?? e.dropoffDriverId ?? e.pickupDriverId)
+  }
+
+  const needsDriverOf = (e: DashboardCalendarEvent) => {
+    if (e.transportStatus !== 'needs_driver') return false
+    if (e.transportType === 'both') {
+      return !(e.dropoffDriverId ?? e.driverId) || !(e.pickupDriverId ?? e.driverId)
+    }
+    return !(e.driverId ?? e.dropoffDriverId ?? e.pickupDriverId)
+  }
 
   const cookColorOf = (cookName: string): string | null => {
     if (!cookName) return null
@@ -311,7 +317,7 @@ export default function WeekCalendar({
       background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 12,
       padding: density === 'tv' ? 'clamp(8px, 1vh, 14px)' : 12,
       fontFamily: "'DM Sans', sans-serif", color: theme.text,
-      display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      display: 'flex', flexDirection: 'column', overflow: 'visible',
       transition: 'background 0.5s, color 0.5s, border-color 0.5s',
       minHeight: 0, minWidth: 0,
     }}>
@@ -376,8 +382,8 @@ export default function WeekCalendar({
               }}>
                 {dayEvts.map(e => {
                   const c = pickEventColor(e, members, isDark)
-                  const driverName = driverNameOf(e.driverId)
-                  const needsDriver = e.transportStatus === 'needs_driver' && !e.driverId
+                  const driverName = driverTextOf(e)
+                  const needsDriver = needsDriverOf(e)
                   const transport = transportLabel(e.transportType)
                   const carpoolNote = e.carpoolNote
                   return (
@@ -389,12 +395,12 @@ export default function WeekCalendar({
                       fontSize: s.allDayBlockSize as any, fontWeight: 500,
                       padding: '3px 8px', borderRadius: 4,
                       lineHeight: 1.25,
-                      overflow: 'hidden',
+                      overflow: 'visible',
                     }}>
                       <div style={{
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
+                        overflow: 'visible',
+                        whiteSpace: 'normal',
+                        overflowWrap: 'anywhere',
                       }}>
                         {displayTitle(e)}
                       </div>
@@ -403,14 +409,14 @@ export default function WeekCalendar({
                           marginTop: 2,
                           fontSize: s.eventLocSize as any,
                           opacity: 0.9,
-                          overflow: 'hidden',
+                          overflow: 'visible',
                         }}>
                           <div style={{
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
+                            overflow: 'visible',
+                            whiteSpace: 'normal',
+                            overflowWrap: 'anywhere',
                           }}>
-                            {driverName && <span>{transport}: {driverName}</span>}
+                            {driverName && <span>{e.transportType === 'both' ? driverName : `${transport}: ${driverName}`}</span>}
                             {needsDriver && <span>needs {transport}</span>}
                             {carpoolNote && <span>{driverName || needsDriver ? ' · ' : ''}{carpoolNote}</span>}
                           </div>
@@ -436,7 +442,7 @@ export default function WeekCalendar({
       <div style={{
         position: 'relative', display: 'grid',
         gridTemplateColumns: `${s.leftColW} repeat(7, 1fr)`,
-        flex: 1, minHeight: minGridHeight,
+        flex: 1, minHeight: minGridHeight, overflow: 'visible',
       }}>
         <div style={{ position: 'relative' }}>
           {Array.from({ length: endHour - startHour }).map((_, i) => {
@@ -479,11 +485,10 @@ export default function WeekCalendar({
                 const top = pctTop(e.startMinutes)
                 const heightPct = Math.max(pctHeight(e.startMinutes, e.endMinutes), 1.5)
                 const blockStyle = eventBlockStyle(heightPct)
-                const driverName = driverNameOf(e.driverId)
-                const needsDriver = e.transportStatus === 'needs_driver' && !e.driverId
+                const driverName = driverTextOf(e)
+                const needsDriver = needsDriverOf(e)
                 const transport = transportLabel(e.transportType)
                 const title = displayTitle(e)
-                const isTinyBlock = heightPct < 4
                 const carpoolNote = (e as any).carpoolNote as string | undefined
 
                 // Active = currently happening, on today's column
@@ -498,7 +503,7 @@ export default function WeekCalendar({
                     style={{
                       position: 'absolute',
                       top: `${top}%`,
-                      height: `${heightPct}%`,
+                      minHeight: `${heightPct}%`,
                       left: 3, right: 3,
                       background: c.bg, color: c.fg,
                       borderRadius: 5,
@@ -509,19 +514,16 @@ export default function WeekCalendar({
                         ? `0 0 0 3px ${theme.activeRing}, 0 2px 8px rgba(0,0,0,0.25)`
                         : '0 1px 3px rgba(0,0,0,0.18)',
                       borderLeft: needsDriver ? `4px solid ${theme.nowLine}` : undefined,
-                      display: 'flex', flexDirection: 'column', gap: 0,
-                      overflow: 'hidden',
+                      display: 'flex', flexDirection: 'column', gap: 1,
+                      overflow: 'visible',
                       zIndex: isActiveNow ? 2 : 1,
                     }}>
                     <div style={{
                       fontWeight: 600,
                       overflowWrap: 'anywhere',
-                      whiteSpace: isTinyBlock ? 'nowrap' : 'normal',
-                      overflow: isTinyBlock ? 'hidden' : 'visible',
-                      textOverflow: isTinyBlock ? 'ellipsis' : 'clip',
-                      display: isTinyBlock ? 'block' : '-webkit-box',
-                      WebkitLineClamp: isTinyBlock ? undefined : 2,
-                      WebkitBoxOrient: isTinyBlock ? undefined : 'vertical',
+                      whiteSpace: 'normal',
+                      overflow: 'visible',
+                      display: 'block',
                       flexShrink: 0,
                     }}>
                       {title}
@@ -537,12 +539,12 @@ export default function WeekCalendar({
                         fontSize: blockStyle.locSize,
                         opacity: 0.95,
                         fontWeight: 500,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
+                        whiteSpace: 'normal',
+                        overflow: 'visible',
+                        overflowWrap: 'anywhere',
                         flexShrink: 0,
                       }}>
-                        🚗 {transport}: {driverName}
+                        🚗 {e.transportType === 'both' ? driverName : `${transport}: ${driverName}`}
                       </div>
                     )}
                     {needsDriver && (
@@ -550,9 +552,9 @@ export default function WeekCalendar({
                         fontSize: blockStyle.locSize,
                         opacity: 0.95,
                         fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
+                        whiteSpace: 'normal',
+                        overflow: 'visible',
+                        overflowWrap: 'anywhere',
                         flexShrink: 0,
                       }}>
                         ⚠ needs {transport}
@@ -563,9 +565,9 @@ export default function WeekCalendar({
                         fontSize: blockStyle.locSize,
                         opacity: 0.85,
                         fontStyle: 'italic',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
+                        whiteSpace: 'normal',
+                        overflow: 'visible',
+                        overflowWrap: 'anywhere',
                         flexShrink: 0,
                       }}>
                         💬 {carpoolNote}
@@ -666,9 +668,9 @@ export default function WeekCalendar({
                       }} />
                     )}
                     <span style={{
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
+                      overflow: 'visible',
+                      whiteSpace: 'normal',
+                      overflowWrap: 'anywhere',
                     }}>{cook}</span>
                   </div>
                 )}

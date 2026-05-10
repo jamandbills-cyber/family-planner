@@ -117,6 +117,8 @@ export function transformGoogleEvent(
     transportStatus: 'unset',
     transportType: 'ride',
     driverId: null,
+    dropoffDriverId: null,
+    pickupDriverId: null,
     standingRuleId: null,
     carpoolNote: '',
   }
