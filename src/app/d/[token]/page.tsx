@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { getKitchenData, getDashboardForMember } from '@/lib/dashboard-data'
+import { getDashboardForMember } from '@/lib/dashboard-data'
+import { getHouseholdDisplayData } from '@/lib/dashboard-display'
 import KitchenDashboard from '@/lib/KitchenDashboard'
 import KitchenDashboardPortrait from '@/lib/KitchenDashboardPortrait'
 import PersonalDashboard from '@/lib/PersonalDashboard'
@@ -20,6 +21,7 @@ export default async function DevicePage({
     .from('device_tokens')
     .select('view_type, orientation, member_id, label')
     .eq('token', token)
+    .eq('revoked', false)
     .maybeSingle()
 
   if (!device) notFound()
@@ -27,23 +29,18 @@ export default async function DevicePage({
   const orientation: 'landscape' | 'portrait' = device.orientation === 'portrait' ? 'portrait' : 'landscape'
 
   if (device.view_type === 'kitchen') {
-    const data = await getKitchenData()
-    if (!data) notFound()
+    const data = await getHouseholdDisplayData()
     if (orientation === 'portrait') {
       return (
         <KitchenDashboardPortrait
-          columns={data.columns}
-          calendar={data.calendar}
-          members={data.members}
+          initialData={data}
           deviceToken={token}
         />
       )
     }
     return (
       <KitchenDashboard
-        columns={data.columns}
-        calendar={data.calendar}
-        members={data.members}
+        initialData={data}
         deviceToken={token}
       />
     )

@@ -464,8 +464,17 @@ export default function MeetingPage() {
                             {members.filter(m => m.type === 'adult').map(a => {
                               const sub      = submissions.find(s => s.memberId === a.id)
                               const response = sub?.payload?.drivingResponses?.[sel.id]
-                              const canDrive = response === true
-                              const cantDrive= response === false
+                              const responseLabel = response && typeof response === 'object'
+                                ? [response.dropoff ? 'drop-off' : null, response.pickup ? 'pick-up' : null].filter(Boolean).join(' + ')
+                                : ''
+                              const canDrive = response === true || (
+                                response && typeof response === 'object' &&
+                                (response.dropoff === true || response.pickup === true)
+                              )
+                              const cantDrive= response === false || (
+                                response && typeof response === 'object' &&
+                                response.dropoff !== true && response.pickup !== true
+                              )
                               const noAnswer = response == null
                               const assigned = sel.driverId === a.id
                               return (
@@ -480,7 +489,7 @@ export default function MeetingPage() {
                                   </span>
                                   <span style={{ fontSize:13, fontWeight:600, color:'#fff', flex:1 }}>{a.name}</span>
                                   {assigned   && <span style={{ fontSize:11, background:'rgba(255,255,255,0.2)', color:'#fff', padding:'3px 9px', borderRadius:6, fontWeight:700 }}>🚗 Assigned</span>}
-                                  {!assigned && canDrive  && <span style={{ fontSize:11, color:'#4ADE80', fontWeight:600 }}>✓ Available</span>}
+                                  {!assigned && canDrive  && <span style={{ fontSize:11, color:'#4ADE80', fontWeight:600 }}>✓ {responseLabel || 'Available'}</span>}
                                   {!assigned && cantDrive && <span style={{ fontSize:11, color:'rgba(239,68,68,0.7)', fontWeight:500 }}>✗ Not available</span>}
                                   {!assigned && noAnswer  && <span style={{ fontSize:11, color:'rgba(255,255,255,0.3)', fontStyle:'italic' }}>No response</span>}
                                 </div>

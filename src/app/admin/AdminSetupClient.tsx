@@ -53,6 +53,7 @@ function TestLinksPanel({ weekStartKey }: { weekStartKey: string | null }) {
   const [emailResult,setEmailResult]= useState<{ sent: string[]; failed: string[] } | null>(null)
   const [errMsg,     setErrMsg]     = useState('')
   const [copied,     setCopied]     = useState<string | null>(null)
+  const [sharedUrl,  setSharedUrl]  = useState('')
 
   const generate = async () => {
     if (!weekStartKey) return
@@ -67,6 +68,7 @@ function TestLinksPanel({ weekStartKey }: { weekStartKey: string | null }) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`)
       setLinks(data.links ?? [])
+      setSharedUrl(data.sharedUrl ?? '')
       setStatus('done')
     } catch (e: any) {
       setErrMsg(e.message)
@@ -104,7 +106,7 @@ function TestLinksPanel({ weekStartKey }: { weekStartKey: string | null }) {
         style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 16 }}>🔗</span>
-          <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, fontWeight: 600, color: '#1A1A2E' }}>Send Form Links</span>
+          <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, fontWeight: 600, color: '#1A1A2E' }}>Planning Form Links</span>
           {emailStatus === 'sent' && <span style={{ fontSize: 11, background: '#F0FDF4', color: '#16A34A', border: '1px solid #BBF7D0', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>Emails sent ✓</span>}
         </div>
         {open ? <ChevronUp size={15} color="#8B8599" /> : <ChevronDown size={15} color="#8B8599" />}
@@ -112,7 +114,7 @@ function TestLinksPanel({ weekStartKey }: { weekStartKey: string | null }) {
       {open && (
         <div style={{ padding: '0 20px 20px', borderTop: '1px solid #F0EDE8' }}>
           <p style={{ fontSize: 13, color: '#8B8599', margin: '12px 0 14px', lineHeight: 1.5 }}>
-            Send each family member their unique form link via email. Or generate links to share manually.
+            Generate one group link to text everyone, or use the individual links if needed.
           </p>
 
           {/* Email send button — primary action */}
@@ -169,6 +171,24 @@ function TestLinksPanel({ weekStartKey }: { weekStartKey: string | null }) {
           )}
           {status === 'done' && links.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {sharedUrl && (
+                <div style={{ padding: '12px 14px', background: '#F0FDF4', borderRadius: 10, border: '1px solid #BBF7D0', marginBottom: 4 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#15803D', marginBottom: 5 }}>
+                    Group text link
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, color: '#166534', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sharedUrl}</span>
+                    <a href={sharedUrl} target="_blank" rel="noreferrer"
+                      style={{ fontSize: 12, color: '#1D4ED8', fontWeight: 600, textDecoration: 'none', padding: '4px 8px', background: '#EFF6FF', borderRadius: 5, whiteSpace: 'nowrap' }}>
+                      Open ↗
+                    </a>
+                    <button onClick={() => copyLink(sharedUrl, 'group-link')}
+                      style={{ fontSize: 12, color: copied === 'group-link' ? '#15803D' : '#166534', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", whiteSpace: 'nowrap' }}>
+                      {copied === 'group-link' ? '✓ Copied' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+              )}
               {(['adult', 'kid'] as const).map(type => {
                 const group = links.filter(l => l.type === type)
                 if (!group.length) return null
@@ -701,6 +721,7 @@ export default function AdminSetupClient() {
               ...evt,
               involvedIds:     saved.involvedIds     ?? evt.involvedIds,
               transportStatus: saved.transportStatus ?? evt.transportStatus,
+              transportType:   saved.transportType   ?? evt.transportType ?? 'ride',
               driverId:        saved.driverId        ?? evt.driverId,
               carpoolNote:     saved.carpoolNote     ?? evt.carpoolNote,
             }
@@ -793,6 +814,7 @@ export default function AdminSetupClient() {
           allDay: false,
           involvedIds: SCHOOL_KIDS,
           transportStatus: 'needs_driver' as const,
+          transportType: 'dropoff' as const,
           driverId: config.dropoffDriverId || null,
           standingRuleId: null,
           carpoolNote: '',
@@ -809,6 +831,7 @@ export default function AdminSetupClient() {
           allDay: false,
           involvedIds: SCHOOL_KIDS,
           transportStatus: 'needs_driver' as const,
+          transportType: 'pickup' as const,
           driverId: config.pickupDriverId || null,
           standingRuleId: null,
           carpoolNote: '',
@@ -852,6 +875,13 @@ export default function AdminSetupClient() {
   const assignDriver = (eventId: string, val: string) =>
     setEvents(ev => {
       const updated = ev.map(e => e.id === eventId ? { ...e, driverId: val || null } : e)
+      saveImmediately(updated)
+      return updated
+    })
+
+  const setTransportType = (eventId: string, type: CalendarEvent['transportType']) =>
+    setEvents(ev => {
+      const updated = ev.map(e => e.id === eventId ? { ...e, transportType: type ?? 'ride' } : e)
       saveImmediately(updated)
       return updated
     })
@@ -1166,18 +1196,36 @@ export default function AdminSetupClient() {
                     )}
                   </div>
                   {sel.transportStatus === 'needs_driver' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                      <select value={sel.driverId ?? ''} onChange={e => assignDriver(sel.id, e.target.value)}
-                        style={{ ...s.select, background: '#fff', border: '1.5px solid rgba(255,255,255,0.4)', color: '#1A1A2E' }}>
-                        <option value="">— Assign driver —</option>
-                        {DRIVERS.map(a => (
-                          <option key={a.id} value={a.id} style={{ color: '#1A1A2E', background: '#fff' }}>{a.name}{a.type === 'child' ? ' (teen)' : ''}</option>
-                        ))}
-                        <option value="__carpool__" style={{ color: '#1A1A2E', background: '#fff' }}>Outside carpool</option>
-                      </select>
-                      <input type="text" placeholder="Carpool note (optional)" value={sel.carpoolNote ?? ''}
-                        onChange={e => updateCarpoolNote(sel.id, e.target.value)}
-                        style={{ border: '1.5px solid rgba(255,255,255,0.18)', borderRadius: 6, padding: '6px 10px', fontSize: 12, background: 'rgba(255,255,255,0.07)', color: '#fff', width: 210, fontFamily: "'DM Sans',sans-serif" }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {([
+                          { val: 'ride' as const, label: 'Ride' },
+                          { val: 'dropoff' as const, label: 'Drop-off' },
+                          { val: 'pickup' as const, label: 'Pick-up' },
+                          { val: 'both' as const, label: 'Drop-off + pick-up' },
+                        ]).map(opt => {
+                          const active = (sel.transportType ?? 'ride') === opt.val
+                          return (
+                            <button key={opt.val} onClick={() => setTransportType(sel.id, opt.val)}
+                              style={{ padding: '5px 10px', borderRadius: 7, fontSize: 12, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", border: `1.5px solid ${active ? '#FDE68A' : 'rgba(255,255,255,0.15)'}`, background: active ? '#FEF9C3' : 'rgba(255,255,255,0.08)', color: active ? '#92400E' : 'rgba(255,255,255,0.55)', fontWeight: active ? 700 : 400 }}>
+                              {opt.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <select value={sel.driverId ?? ''} onChange={e => assignDriver(sel.id, e.target.value)}
+                          style={{ ...s.select, background: '#fff', border: '1.5px solid rgba(255,255,255,0.4)', color: '#1A1A2E' }}>
+                          <option value="">— Assign driver —</option>
+                          {DRIVERS.map(a => (
+                            <option key={a.id} value={a.id} style={{ color: '#1A1A2E', background: '#fff' }}>{a.name}{a.type === 'child' ? ' (teen)' : ''}</option>
+                          ))}
+                          <option value="__carpool__" style={{ color: '#1A1A2E', background: '#fff' }}>Outside carpool</option>
+                        </select>
+                        <input type="text" placeholder="Carpool note (optional)" value={sel.carpoolNote ?? ''}
+                          onChange={e => updateCarpoolNote(sel.id, e.target.value)}
+                          style={{ border: '1.5px solid rgba(255,255,255,0.18)', borderRadius: 6, padding: '6px 10px', fontSize: 12, background: 'rgba(255,255,255,0.07)', color: '#fff', width: 210, fontFamily: "'DM Sans',sans-serif" }} />
+                      </div>
                     </div>
                   )}
                 </div>

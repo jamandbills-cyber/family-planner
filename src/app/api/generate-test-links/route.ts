@@ -52,5 +52,8 @@ export async function POST(req: NextRequest) {
     token: t.token,
   }))
 
-  return NextResponse.json({ links })
+  return NextResponse.json({
+    links,
+    sharedUrl: `${appUrl}/form/week/${weekStart}`,
+  })
 }

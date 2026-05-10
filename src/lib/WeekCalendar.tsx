@@ -21,6 +21,13 @@ type Props = {
 }
 
 const DAY_LABELS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+function transportLabel(type?: string) {
+  if (type === 'dropoff') return 'drop-off'
+  if (type === 'pickup') return 'pick-up'
+  if (type === 'both') return 'drop-off + pick-up'
+  return 'driver'
+}
 const NEUTRAL_LIGHT = '#888780'
 const NEUTRAL_DARK  = '#3A3A4A'
 const SCHOOL_BG_LIGHT = '#FEF3C7'
@@ -371,6 +378,7 @@ export default function WeekCalendar({
                   const c = pickEventColor(e, members, isDark)
                   const driverName = driverNameOf(e.driverId)
                   const needsDriver = e.transportStatus === 'needs_driver' && !e.driverId
+                  const transport = transportLabel(e.transportType)
                   const carpoolNote = e.carpoolNote
                   return (
                     <div
@@ -402,8 +410,8 @@ export default function WeekCalendar({
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
                           }}>
-                            {driverName && <span>driver: {driverName}</span>}
-                            {needsDriver && <span>needs driver</span>}
+                            {driverName && <span>{transport}: {driverName}</span>}
+                            {needsDriver && <span>needs {transport}</span>}
                             {carpoolNote && <span>{driverName || needsDriver ? ' · ' : ''}{carpoolNote}</span>}
                           </div>
                           {e.involvedIds && e.involvedIds.length > 0 && (
@@ -473,6 +481,7 @@ export default function WeekCalendar({
                 const blockStyle = eventBlockStyle(heightPct)
                 const driverName = driverNameOf(e.driverId)
                 const needsDriver = e.transportStatus === 'needs_driver' && !e.driverId
+                const transport = transportLabel(e.transportType)
                 const title = displayTitle(e)
                 const isTinyBlock = heightPct < 4
                 const carpoolNote = (e as any).carpoolNote as string | undefined
@@ -533,7 +542,7 @@ export default function WeekCalendar({
                         textOverflow: 'ellipsis',
                         flexShrink: 0,
                       }}>
-                        🚗 {driverName}
+                        🚗 {transport}: {driverName}
                       </div>
                     )}
                     {needsDriver && (
@@ -546,7 +555,7 @@ export default function WeekCalendar({
                         textOverflow: 'ellipsis',
                         flexShrink: 0,
                       }}>
-                        ⚠ needs driver
+                        ⚠ needs {transport}
                       </div>
                     )}
                     {blockStyle.showCarpoolNote && carpoolNote && carpoolNote.trim() && (

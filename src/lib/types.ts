@@ -9,6 +9,7 @@ export interface FamilyMember {
 
 // ─── Calendar events ──────────────────────────────────────────
 export type TransportStatus = 'unset' | 'needs_driver' | 'no_transport'
+export type TransportType = 'ride' | 'dropoff' | 'pickup' | 'both'
 
 export interface CalendarEvent {
   id: string
@@ -20,6 +21,7 @@ export interface CalendarEvent {
   allDay: boolean
   involvedIds: string[]   // family member IDs — set by admin
   transportStatus: TransportStatus
+  transportType?: TransportType
   driverId?: string | null
   standingRuleId?: string | null
   carpoolNote?: string
@@ -84,7 +86,7 @@ export interface KidSubmission {
 export interface AdultSubmission {
   memberId: string
   submittedAt: string
-  drivingResponses: Record<string, boolean | null>  // eventId → can drive
+  drivingResponses: Record<string, boolean | { dropoff?: boolean; pickup?: boolean } | null>
   unavailableDays: string[]
   offCalendarEvents: OffCalendarEvent[]
   meetingTopics: string[]

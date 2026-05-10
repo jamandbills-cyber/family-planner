@@ -12,6 +12,15 @@ const SCHOOL_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday']
 
 function emptyEvent() { return { id: Date.now(), what:'', day:'', time:'', where:'' } }
 
+type DriveResponse = boolean | { dropoff?: boolean; pickup?: boolean }
+
+function driveSlots(transportType?: string): Array<'dropoff' | 'pickup'> {
+  if (transportType === 'dropoff') return ['dropoff']
+  if (transportType === 'pickup') return ['pickup']
+  if (transportType === 'both') return ['dropoff', 'pickup']
+  return []
+}
+
 export default function AdultFormPage() {
   const params  = useParams()
   const token   = params?.token as string
@@ -21,7 +30,7 @@ export default function AdultFormPage() {
   const [adultName,   setAdultName]   = useState('')
   const [weekLabel,   setWeekLabel]   = useState('')
   const [eventsByDay, setEventsByDay] = useState<Record<number, any[]>>({})
-  const [driveMap,    setDriveMap]    = useState<Record<string, boolean>>({})
+  const [driveMap,    setDriveMap]    = useState<Record<string, DriveResponse>>({})
   const [schoolAvail, setSchoolAvail] = useState<Record<string, { am: boolean; pm: boolean }>>({})
   const [submitted,   setSubmitted]   = useState(false)
   const [submitting,  setSubmitting]  = useState(false)
@@ -41,10 +50,14 @@ export default function AdultFormPage() {
         setWeekLabel(data.weekLabel)
         setEventsByDay(data.eventsByDay ?? {})
 
-        const dm: Record<string, boolean> = {}
+        const dm: Record<string, DriveResponse> = {}
         for (const evts of Object.values(data.eventsByDay ?? {})) {
           for (const e of evts as any[]) {
-            if (e.needsDriver) dm[e.id] = false
+            if (!e.needsDriver) continue
+            const slots = driveSlots(e.transportType)
+            dm[e.id] = slots.length
+              ? slots.reduce((acc, slot) => ({ ...acc, [slot]: false }), {} as { dropoff?: boolean; pickup?: boolean })
+              : false
             // Pre-assigned drivers don't need a toggle
           }
         }
@@ -65,7 +78,11 @@ export default function AdultFormPage() {
     load()
   }, [token])
 
-  const toggleDrive  = (id: string) => setDriveMap(m => ({ ...m, [id]: !m[id] }))
+  const toggleDrive  = (id: string, slot?: 'dropoff' | 'pickup') => setDriveMap(m => {
+    if (!slot) return { ...m, [id]: !m[id] }
+    const current = typeof m[id] === 'object' && m[id] !== null ? m[id] as { dropoff?: boolean; pickup?: boolean } : {}
+    return { ...m, [id]: { ...current, [slot]: !current[slot] } }
+  })
   const toggleSchool = (day: string, slot: 'am' | 'pm') =>
     setSchoolAvail(s => ({ ...s, [day]: { ...s[day], [slot]: !s[day]?.[slot] } }))
 
@@ -195,7 +212,11 @@ export default function AdultFormPage() {
                       )}
                       {dayEvts.map((evt: any) => {
                         const isSchool   = evt.id?.startsWith('school_')
-                        const canDrive   = driveMap[evt.id] ?? false
+                        const slots      = driveSlots(evt.transportType)
+                        const response   = driveMap[evt.id]
+                        const canDrive   = typeof response === 'object' && response !== null
+                          ? Object.values(response).some(Boolean)
+                          : !!response
                         const needsDrv   = evt.needsDriver
                         const amIDriver  = evt.amDriver === true
 
@@ -213,14 +234,32 @@ export default function AdultFormPage() {
                               </div>
                             )}
                             {needsDrv && (
-                              <button onClick={() => toggleDrive(evt.id)}
-                                style={{ width:'100%', padding:'3px', borderRadius:4, fontSize:9, fontWeight:700, cursor:'pointer', fontFamily:"'DM Sans',sans-serif",
-                                  background: canDrive ? '#16A34A' : '#fff',
-                                  border: `1.5px solid ${canDrive ? '#16A34A' : '#D1D5DB'}`,
-                                  color: canDrive ? '#fff' : '#9CA3AF',
-                                }}>
-                                {canDrive ? '✓ I can drive' : 'Can drive? →'}
-                              </button>
+                              slots.length > 0 ? (
+                                <div style={{ display:'flex', gap:3 }}>
+                                  {slots.map(slot => {
+                                    const slotOn = typeof response === 'object' && response !== null && !!response[slot]
+                                    return (
+                                      <button key={slot} onClick={() => toggleDrive(evt.id, slot)}
+                                        style={{ flex:1, padding:'3px 2px', borderRadius:4, fontSize:9, fontWeight:700, cursor:'pointer', fontFamily:"'DM Sans',sans-serif",
+                                          background: slotOn ? '#16A34A' : '#fff',
+                                          border: `1.5px solid ${slotOn ? '#16A34A' : '#D1D5DB'}`,
+                                          color: slotOn ? '#fff' : '#9CA3AF',
+                                        }}>
+                                        {slotOn ? '✓ ' : ''}{slot === 'dropoff' ? 'Drop' : 'Pick'}
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              ) : (
+                                <button onClick={() => toggleDrive(evt.id)}
+                                  style={{ width:'100%', padding:'3px', borderRadius:4, fontSize:9, fontWeight:700, cursor:'pointer', fontFamily:"'DM Sans',sans-serif",
+                                    background: canDrive ? '#16A34A' : '#fff',
+                                    border: `1.5px solid ${canDrive ? '#16A34A' : '#D1D5DB'}`,
+                                    color: canDrive ? '#fff' : '#9CA3AF',
+                                  }}>
+                                  {canDrive ? '✓ I can drive' : 'Can drive? →'}
+                                </button>
+                              )
                             )}
                           </div>
                         )

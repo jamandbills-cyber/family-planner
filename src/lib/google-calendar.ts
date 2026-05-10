@@ -115,6 +115,7 @@ export function transformGoogleEvent(
     allDay: startParts.allDay,
     involvedIds: [],
     transportStatus: 'unset',
+    transportType: 'ride',
     driverId: null,
     standingRuleId: null,
     carpoolNote: '',

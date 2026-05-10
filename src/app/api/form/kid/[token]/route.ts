@@ -34,6 +34,7 @@ export async function GET(
         title:   e.title,
         time:    e.time,
         sortMin: e.sortMin ?? 0,
+        transportType: e.transportType ?? 'ride',
         isYours: (e.involvedIds ?? []).includes(member.id),
         driver:  allMembers.find(m => m.id === e.driverId)?.name ?? '',
       })

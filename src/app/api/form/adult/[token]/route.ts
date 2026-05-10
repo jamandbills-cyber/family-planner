@@ -37,6 +37,7 @@ export async function GET(
         sortMin:         e.sortMin ?? 0,
         location:        e.location ?? '',
         transportStatus: e.transportStatus ?? 'unset',
+        transportType:   e.transportType ?? 'ride',
         driverId:        e.driverId ?? null,
         needsDriver:     e.transportStatus === 'needs_driver' && !e.driverId && !e.id?.startsWith('school_'),
         amDriver:        e.transportStatus === 'needs_driver' && e.driverId === member.id && !e.id?.startsWith('school_'),
