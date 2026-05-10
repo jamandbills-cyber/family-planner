@@ -50,12 +50,23 @@ const SCHOOL_KIDS = ['boston', 'hailee', 'sadie']
 const SCHOOL_DAYS = [1, 2, 3, 4, 5] // Mon=1 … Fri=5 (matches dayIdx with Sun=0)
 
 const DEFAULT_SCHOOL = {
-  dropoffTime:     '7:30 AM',
-  pickupTime:      '3:00 PM',
+  dropoffTime:     '7:00 AM',
+  pickupTime:      '2:30 PM',
   dropoffDriverId: '',
   pickupDriverId:  '',
   noSchool:        [] as number[], // whole days off
   removedEvents:   [] as string[], // one-off removed event IDs
+}
+
+function normalizeSchoolConfig(config: Partial<typeof DEFAULT_SCHOOL> | null | undefined): typeof DEFAULT_SCHOOL {
+  const merged = { ...DEFAULT_SCHOOL, ...(config ?? {}) }
+  return {
+    ...merged,
+    dropoffTime: !merged.dropoffTime || merged.dropoffTime === '7:30 AM' ? DEFAULT_SCHOOL.dropoffTime : merged.dropoffTime,
+    pickupTime: !merged.pickupTime || merged.pickupTime === '3:00 PM' ? DEFAULT_SCHOOL.pickupTime : merged.pickupTime,
+    noSchool: Array.isArray(merged.noSchool) ? merged.noSchool : [],
+    removedEvents: Array.isArray(merged.removedEvents) ? merged.removedEvents : [],
+  }
 }
 
 // ─── Test Links Panel ─────────────────────────────────────────
@@ -721,16 +732,14 @@ export default function AdminSetupClient() {
       } catch { /* no saved state */ }
 
       const savedEvts: any[] = savedState?.events ?? []
-      const savedConfig = savedState?.schoolConfig ?? DEFAULT_SCHOOL
+      const savedConfig = normalizeSchoolConfig(savedState?.schoolConfig)
 
       // Restore school config from saved state
       setSchoolConfig(savedConfig)
 
       // Single setEvents call — everything at once
       setEvents(() => {
-        const schoolEvts = buildSchoolEvents(savedConfig)
-
-        const merged = incoming.map(evt => {
+        const applySavedEventState = (evt: CalendarEvent) => {
           const saved = savedEvts.find((s: any) => s.id === evt.id) ??
                         savedEvts.find((s: any) => s.title === evt.title && s.dayIdx === evt.dayIdx)
 
@@ -753,7 +762,10 @@ export default function AdminSetupClient() {
             }
           }
           return evt
-        })
+        }
+
+        const schoolEvts = buildSchoolEvents(savedConfig).map(applySavedEventState)
+        const merged = incoming.map(applySavedEventState)
 
         return [...merged, ...schoolEvts]
       })
@@ -883,12 +895,12 @@ export default function AdminSetupClient() {
   // the 300ms debounce. This prevents the "I picked a driver and refreshed
   // and it's gone" race where the debounce timer hadn't fired yet.
 
-  const saveImmediately = (updatedEvents: CalendarEvent[]) => {
+  const saveImmediately = (updatedEvents: CalendarEvent[], nextSchoolConfig = schoolConfig) => {
     if (!weekStartKey) return
     if (saveTimer.current) clearTimeout(saveTimer.current)
     const snapshot = {
       events: updatedEvents, dinner, agenda,
-      deadline, deadlineDay, isReady, schoolConfig,
+      deadline, deadlineDay, isReady, schoolConfig: nextSchoolConfig,
     }
     saveState(weekStartKey, snapshot)
   }
@@ -914,6 +926,8 @@ export default function AdminSetupClient() {
         if (e.id !== eventId) return e
         if (slot === 'dropoff') return { ...e, dropoffDriverId: val || null }
         if (slot === 'pickup') return { ...e, pickupDriverId: val || null }
+        if (e.transportType === 'dropoff') return { ...e, driverId: val || null, dropoffDriverId: val || null }
+        if (e.transportType === 'pickup') return { ...e, driverId: val || null, pickupDriverId: val || null }
         return { ...e, driverId: val || null }
       })
       saveImmediately(updated)
