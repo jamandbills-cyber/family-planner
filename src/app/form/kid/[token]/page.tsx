@@ -153,6 +153,7 @@ export default function KidFormPage() {
                       )}
                       {dayEvts.map((evt: any) => {
                         const yours = evt.isYours
+                        const noTransport = evt.transportStatus === 'no_transport'
                         return (
                           <div key={evt.id} style={{ padding:'5px 6px', borderRadius:6, fontSize:10,
                             background: yours ? '#FEF0EA' : '#F7F4EF',
@@ -161,14 +162,17 @@ export default function KidFormPage() {
                           }}>
                             <div style={{ fontWeight: yours ? 700 : 500, color:'#1A1A2E', lineHeight:1.3 }}>{evt.title}</div>
                             <div style={{ color:'#8B8599', marginTop:1 }}>{evt.time}</div>
+                            {noTransport && (
+                              <div style={{ color:'#15803D', marginTop:2, fontWeight:700 }}>✓ No transport needed</div>
+                            )}
                             {evt.transportType === 'both' && (evt.dropoffDriver || evt.pickupDriver) && (
-                              <div style={{ color:'#C4522A', marginTop:2, fontWeight:600 }}>
+                              <div style={{ color:'#C4522A', marginTop:2, fontWeight:700 }}>
                                 {evt.dropoffDriver && <div>Drop: {evt.dropoffDriver}</div>}
                                 {evt.pickupDriver && <div>Pick: {evt.pickupDriver}</div>}
                               </div>
                             )}
                             {evt.transportType !== 'both' && evt.driver && (
-                              <div style={{ color:'#C4522A', marginTop:2, fontWeight:600 }}>🚗 {evt.driver}</div>
+                              <div style={{ color:'#C4522A', marginTop:2, fontWeight:700 }}>🚗 {evt.driver}</div>
                             )}
                           </div>
                         )

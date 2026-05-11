@@ -30,16 +30,21 @@ export async function GET(
     for (const e of adminEvents) {
       if (e.dayIdx === undefined) continue
       const transportType = e.transportType ?? 'ride'
-      const dropoffDriver = allMembers.find(m => m.id === (e.dropoffDriverId ?? (transportType === 'both' || transportType === 'dropoff' ? e.driverId : null)))?.name ?? ''
-      const pickupDriver = allMembers.find(m => m.id === (e.pickupDriverId ?? (transportType === 'both' || transportType === 'pickup' ? e.driverId : null)))?.name ?? ''
+      const driverId = e.driverId ?? null
+      const dropoffDriverId = e.dropoffDriverId ?? (transportType === 'both' || transportType === 'dropoff' ? driverId : null)
+      const pickupDriverId = e.pickupDriverId ?? (transportType === 'both' || transportType === 'pickup' ? driverId : null)
+      const driver = allMembers.find(m => m.id === driverId)?.name ?? (driverId === '__carpool__' ? 'Outside carpool' : '')
+      const dropoffDriver = allMembers.find(m => m.id === dropoffDriverId)?.name ?? (dropoffDriverId === '__carpool__' ? 'Outside carpool' : '')
+      const pickupDriver = allMembers.find(m => m.id === pickupDriverId)?.name ?? (pickupDriverId === '__carpool__' ? 'Outside carpool' : '')
       eventsByDay[e.dayIdx].push({
         id:      e.id,
         title:   e.title,
         time:    e.time,
         sortMin: e.sortMin ?? 0,
+        transportStatus: e.transportStatus ?? 'unset',
         transportType,
         isYours: (e.involvedIds ?? []).includes(member.id),
-        driver:  allMembers.find(m => m.id === e.driverId)?.name ?? '',
+        driver,
         dropoffDriver,
         pickupDriver,
       })

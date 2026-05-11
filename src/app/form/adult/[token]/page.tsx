@@ -235,6 +235,7 @@ export default function AdultFormPage() {
                           : !!response
                         const needsDrv   = evt.needsDriver
                         const amIDriver  = evt.amDriver === true
+                        const noTransport = evt.transportStatus === 'no_transport'
                         const coveredBy = evt.transportType === 'both'
                           ? [evt.dropoffDriverName ? `Drop: ${evt.dropoffDriverName}` : null, evt.pickupDriverName ? `Pick: ${evt.pickupDriverName}` : null].filter(Boolean).join(' · ')
                           : evt.driverName || evt.dropoffDriverName || evt.pickupDriverName
@@ -250,6 +251,11 @@ export default function AdultFormPage() {
                             {amIDriver && (
                               <div style={{ fontSize:9, color:'#15803D', fontWeight:700, display:'flex', alignItems:'center', gap:3 }}>
                                 🔒 You're driving this
+                              </div>
+                            )}
+                            {noTransport && (
+                              <div style={{ fontSize:9, color:'#15803D', fontWeight:700, display:'flex', alignItems:'center', gap:3, marginTop:2 }}>
+                                ✓ No transport needed
                               </div>
                             )}
                             {!needsDrv && !amIDriver && coveredBy && (
