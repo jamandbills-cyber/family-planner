@@ -13,6 +13,7 @@ const SCHOOL_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday']
 function emptyEvent() { return { id: Date.now(), what:'', day:'', time:'', where:'' } }
 
 type DriveResponse = boolean | { dropoff?: boolean; pickup?: boolean }
+type SchoolAssignment = { driverId: string; driverName: string; isYou: boolean } | null
 
 function driveSlots(transportType?: string): Array<'dropoff' | 'pickup'> {
   if (transportType === 'dropoff') return ['dropoff']
@@ -32,6 +33,7 @@ export default function AdultFormPage() {
   const [eventsByDay, setEventsByDay] = useState<Record<number, any[]>>({})
   const [driveMap,    setDriveMap]    = useState<Record<string, DriveResponse>>({})
   const [schoolAvail, setSchoolAvail] = useState<Record<string, { am: boolean; pm: boolean }>>({})
+  const [schoolAssignments, setSchoolAssignments] = useState<Record<string, { am: SchoolAssignment; pm: SchoolAssignment }>>({})
   const [submitted,   setSubmitted]   = useState(false)
   const [submitting,  setSubmitting]  = useState(false)
   const [offEvents,   setOffEvents]   = useState<ReturnType<typeof emptyEvent>[]>([])
@@ -49,6 +51,7 @@ export default function AdultFormPage() {
         setAdultName(data.name)
         setWeekLabel(data.weekLabel)
         setEventsByDay(data.eventsByDay ?? {})
+        setSchoolAssignments(data.schoolAssignments ?? {})
 
         const dm: Record<string, DriveResponse> = {}
         for (const evts of Object.values(data.eventsByDay ?? {})) {
@@ -191,6 +194,19 @@ export default function AdultFormPage() {
                       <div style={{ padding:'5px 5px', display:'flex', gap:3, borderBottom:'1px solid #F0EDE8', background:'#F8FBFF' }}>
                         {(['am','pm'] as const).map(slot => {
                           const active = sa[slot]
+                          const assignment = schoolAssignments[day]?.[slot]
+                          if (assignment) {
+                            return (
+                              <div key={slot}
+                                style={{ flex:1, padding:'5px 2px', borderRadius:5, fontSize:10, fontWeight:700, fontFamily:"'DM Sans',sans-serif", textAlign:'center',
+                                  background: assignment.isYou ? '#F0FDF4' : '#EFF6FF',
+                                  border: `1.5px solid ${assignment.isYou ? '#BBF7D0' : '#BFDBFE'}`,
+                                  color: assignment.isYou ? '#15803D' : '#1D4ED8',
+                                }}>
+                                🏫 {slot.toUpperCase()} {assignment.isYou ? 'You' : assignment.driverName}
+                              </div>
+                            )
+                          }
                           return (
                             <button key={slot} onClick={() => toggleSchool(day, slot)}
                               style={{ flex:1, padding:'5px 2px', borderRadius:5, fontSize:10, fontWeight:active?700:500, cursor:'pointer', fontFamily:"'DM Sans',sans-serif", textAlign:'center',
@@ -219,6 +235,9 @@ export default function AdultFormPage() {
                           : !!response
                         const needsDrv   = evt.needsDriver
                         const amIDriver  = evt.amDriver === true
+                        const coveredBy = evt.transportType === 'both'
+                          ? [evt.dropoffDriverName ? `Drop: ${evt.dropoffDriverName}` : null, evt.pickupDriverName ? `Pick: ${evt.pickupDriverName}` : null].filter(Boolean).join(' · ')
+                          : evt.driverName || evt.dropoffDriverName || evt.pickupDriverName
 
                         return (
                           <div key={evt.id} style={{ padding:'5px 6px', borderRadius:6, fontSize:10,
@@ -231,6 +250,11 @@ export default function AdultFormPage() {
                             {amIDriver && (
                               <div style={{ fontSize:9, color:'#15803D', fontWeight:700, display:'flex', alignItems:'center', gap:3 }}>
                                 🔒 You're driving this
+                              </div>
+                            )}
+                            {!needsDrv && !amIDriver && coveredBy && (
+                              <div style={{ fontSize:9, color:'#15803D', fontWeight:700, display:'flex', alignItems:'center', gap:3, marginTop:2 }}>
+                                ✓ Covered: {coveredBy}
                               </div>
                             )}
                             {needsDrv && (

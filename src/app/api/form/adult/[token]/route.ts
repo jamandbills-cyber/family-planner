@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getWeekRange } from '@/lib/google-calendar'
 import { format } from 'date-fns'
 import { getSundayPlan } from '@/lib/sunday-plan'
-import { getPlanningToken } from '@/lib/planning-data'
+import { getPlanningMembers, getPlanningToken } from '@/lib/planning-data'
 const DAY_MAP: Record<number, string> = { 1:'Monday', 2:'Tuesday', 3:'Wednesday', 4:'Thursday', 5:'Friday' }
 
 export async function GET(
@@ -18,6 +18,7 @@ export async function GET(
     }
     const member = tokenRecord.member
     const weekStart = tokenRecord.weekStart
+    const allMembers = await getPlanningMembers()
 
     // Load admin state from Supabase
     const planState = await getSundayPlan(weekStart)
@@ -33,6 +34,9 @@ export async function GET(
       const transportType = e.transportType ?? 'ride'
       const dropoffDriverId = e.dropoffDriverId ?? (transportType === 'both' || transportType === 'dropoff' ? e.driverId : null)
       const pickupDriverId = e.pickupDriverId ?? (transportType === 'both' || transportType === 'pickup' ? e.driverId : null)
+      const driverName = allMembers.find(m => m.id === e.driverId)?.name ?? (e.driverId === '__carpool__' ? 'Outside carpool' : '')
+      const dropoffDriverName = allMembers.find(m => m.id === dropoffDriverId)?.name ?? (dropoffDriverId === '__carpool__' ? 'Outside carpool' : '')
+      const pickupDriverName = allMembers.find(m => m.id === pickupDriverId)?.name ?? (pickupDriverId === '__carpool__' ? 'Outside carpool' : '')
       const needsDriver = e.transportStatus === 'needs_driver' && !e.id?.startsWith('school_') && (
         transportType === 'both'
           ? (!dropoffDriverId || !pickupDriverId)
@@ -50,8 +54,11 @@ export async function GET(
         transportStatus: e.transportStatus ?? 'unset',
         transportType,
         driverId:        e.driverId ?? null,
+        driverName,
         dropoffDriverId,
+        dropoffDriverName,
         pickupDriverId,
+        pickupDriverName,
         needsDriver,
         amDriver,
       })
@@ -64,12 +71,40 @@ export async function GET(
       Thursday:  { am: false, pm: false },
       Friday:    { am: false, pm: false },
     }
+    const schoolAssignments: Record<string, {
+      am: { driverId: string; driverName: string; isYou: boolean } | null
+      pm: { driverId: string; driverName: string; isYou: boolean } | null
+    }> = {
+      Monday:    { am: null, pm: null },
+      Tuesday:   { am: null, pm: null },
+      Wednesday: { am: null, pm: null },
+      Thursday:  { am: null, pm: null },
+      Friday:    { am: null, pm: null },
+    }
     for (const e of adminEvents) {
       if (!e.id?.startsWith('school_')) continue
       const dayName = DAY_MAP[e.dayIdx]
-      if (!dayName || e.driverId !== member.id) continue
-      if (e.id.startsWith('school_drop_'))   schoolDefaults[dayName].am = true
-      if (e.id.startsWith('school_pickup_')) schoolDefaults[dayName].pm = true
+      if (!dayName) continue
+
+      const slot = e.id.startsWith('school_drop_')
+        ? 'am'
+        : e.id.startsWith('school_pickup_')
+        ? 'pm'
+        : null
+      if (!slot) continue
+
+      const driverId = slot === 'am'
+        ? e.dropoffDriverId ?? e.driverId
+        : e.pickupDriverId ?? e.driverId
+      if (!driverId) continue
+
+      const driverName = allMembers.find(m => m.id === driverId)?.name ?? (driverId === '__carpool__' ? 'Outside carpool' : 'Assigned')
+      schoolAssignments[dayName][slot] = {
+        driverId,
+        driverName,
+        isYou: driverId === member.id,
+      }
+      if (driverId === member.id) schoolDefaults[dayName][slot] = true
     }
 
     return NextResponse.json({
@@ -79,6 +114,7 @@ export async function GET(
       weekStart,
       eventsByDay,
       schoolDefaults,
+      schoolAssignments,
     })
   } catch (err) {
     console.error('Adult form error:', err)
