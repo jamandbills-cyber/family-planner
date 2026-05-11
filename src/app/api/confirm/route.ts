@@ -14,7 +14,10 @@ export async function POST(req: NextRequest) {
 
   const session = await getServerSession(authOptions)
   if (!session?.accessToken) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Google Calendar/Gmail access is not connected. Sign out and sign back in with Google from the admin page.' }, { status: 401 })
+  }
+  if (session.error) {
+    return NextResponse.json({ error: 'Google Calendar/Gmail access expired. Sign out and sign back in with Google from the admin page.' }, { status: 401 })
   }
 
   try {
@@ -36,6 +39,7 @@ export async function POST(req: NextRequest) {
 
     // 3. Email all adults
     const emailAddresses = adults.map(m => m.email).filter(Boolean)
+    results.emailRecipients = emailAddresses.length
     if (emailAddresses.length > 0) {
       const html = buildWeeklyPlanEmail(plan)
       results.emailSent = await sendEmail(accessToken, {
@@ -43,6 +47,12 @@ export async function POST(req: NextRequest) {
         subject: `Family Plan: ${plan.weekLabel ?? weekStart}`,
         html,
       })
+      if (!results.emailSent) {
+        results.emailError = 'Gmail send failed. Reconnect Google from the admin page and confirm Gmail API access is enabled.'
+      }
+    } else {
+      results.emailSent = false
+      results.emailError = 'No adult email addresses are configured.'
     }
 
     // 4. Text adults the live plan link

@@ -33,17 +33,19 @@ export async function sendEmail(
 // ─── Build MIME message ───────────────────────────────────────
 function buildMimeMessage(opts: { to: string[]; subject: string; html: string }): string {
   const boundary = 'boundary_family_planner'
+  const encodedSubject = `=?UTF-8?B?${Buffer.from(opts.subject, 'utf8').toString('base64')}?=`
+  const encodedHtml = Buffer.from(opts.html, 'utf8').toString('base64').replace(/(.{76})/g, '$1\r\n')
   const lines = [
     `To: ${opts.to.join(', ')}`,
-    `Subject: ${opts.subject}`,
+    `Subject: ${encodedSubject}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
     '',
     `--${boundary}`,
     'Content-Type: text/html; charset=UTF-8',
-    'Content-Transfer-Encoding: quoted-printable',
+    'Content-Transfer-Encoding: base64',
     '',
-    opts.html,
+    encodedHtml,
     '',
     `--${boundary}--`,
   ]

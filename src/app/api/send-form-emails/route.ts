@@ -13,7 +13,10 @@ export async function POST(req: NextRequest) {
 
   const session = await getServerSession(authOptions)
   if (!session?.accessToken) {
-    return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+    return NextResponse.json({ error: 'Google email access is not connected. Sign out and sign back in with Google from the admin page.' }, { status: 401 })
+  }
+  if (session.error) {
+    return NextResponse.json({ error: 'Google email access expired. Sign out and sign back in with Google from the admin page.' }, { status: 401 })
   }
 
   let weekStart: string
@@ -95,10 +98,16 @@ export async function POST(req: NextRequest) {
       })
       if (ok) sent.push(t.name)
       else failed.push(`${t.name} (send failed)`)
-    } catch {
+    } catch (err) {
+      console.error(`Email send failed for ${t.name}:`, err)
       failed.push(`${t.name} (error)`)
     }
   }
 
-  return NextResponse.json({ success: true, sent, failed })
+  return NextResponse.json({
+    success: failed.length === 0,
+    sent,
+    failed,
+    error: sent.length === 0 && failed.length > 0 ? 'No emails were sent. Check Google email authorization and family email addresses.' : undefined,
+  })
 }

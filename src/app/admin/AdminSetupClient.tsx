@@ -113,8 +113,10 @@ function TestLinksPanel({ weekStartKey }: { weekStartKey: string | null }) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setEmailResult({ sent: data.sent ?? [], failed: data.failed ?? [] })
-      setEmailStatus('sent')
-    } catch {
+      setEmailStatus((data.sent ?? []).length > 0 ? 'sent' : 'error')
+      if ((data.sent ?? []).length === 0 && data.error) setErrMsg(data.error)
+    } catch (e: any) {
+      setErrMsg(e.message ?? 'Failed to send emails')
       setEmailStatus('error')
     }
   }
@@ -166,7 +168,7 @@ function TestLinksPanel({ weekStartKey }: { weekStartKey: string | null }) {
               </div>
             )}
             {emailStatus === 'error' && (
-              <p style={{ fontSize: 12, color: '#DC2626', marginTop: 6 }}>Failed to send emails. Check Gmail API scope — sign out and back in.</p>
+              <p style={{ fontSize: 12, color: '#DC2626', marginTop: 6 }}>{errMsg || 'Failed to send emails. Check Gmail API scope — sign out and back in.'}</p>
             )}
           </div>
 

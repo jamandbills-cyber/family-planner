@@ -28,6 +28,7 @@ export default function MeetingPage() {
   const [confirmed,   setConfirmed]   = useState(false)
   const [confirming,  setConfirming]  = useState(false)
   const [confirmResult, setConfirmResult] = useState(null)
+  const [confirmError, setConfirmError] = useState('')
   const [updateSent,  setUpdateSent]  = useState(false)
 
   // ─── Load everything from APIs ────────────────────────────
@@ -209,6 +210,7 @@ export default function MeetingPage() {
 
   const handleConfirm = async () => {
     setConfirming(true)
+    setConfirmError('')
     try {
       const plan = buildPlan()
       const res = await fetch('/api/confirm', {
@@ -217,10 +219,12 @@ export default function MeetingPage() {
         body:    JSON.stringify({ weekStart, plan }),
       })
       const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Confirm failed')
       setConfirmResult(data.results)
       setConfirmed(true)
     } catch (err) {
       console.error('Confirm error:', err)
+      setConfirmError(err instanceof Error ? err.message : 'Confirm failed')
     }
     setConfirming(false)
   }
@@ -289,14 +293,16 @@ export default function MeetingPage() {
           <CheckCircle size={36} color="#16A34A" />
         </div>
         <div style={{ fontFamily:"'Playfair Display',serif", fontSize:28, fontWeight:700, color:'#1A1A2E', marginBottom:10 }}>Week confirmed!</div>
-        <p style={{ fontSize:15, color:'#8B8599', lineHeight:1.6, marginBottom:28 }}>The plan has been sent to everyone.</p>
+        <p style={{ fontSize:15, color:'#8B8599', lineHeight:1.6, marginBottom:28 }}>
+          {confirmResult?.emailSent ? 'The plan has been sent to everyone.' : 'The plan was saved, but one or more send steps need attention.'}
+        </p>
         <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:28 }}>
           {[
-            { icon:'✉', label:`Email sent to ${members.filter(m=>m.email).length} family members`, ok: confirmResult?.emailSent },
+            { icon:'✉', label: confirmResult?.emailSent ? `Email sent to ${confirmResult?.emailRecipients ?? members.filter(m=>m.email).length} family members` : `Email not sent${confirmResult?.emailError ? `: ${confirmResult.emailError}` : ''}`, ok: confirmResult?.emailSent },
             { icon:'📱', label:`Texts sent to ${confirmResult?.textsSent ?? 0} family members`, ok: (confirmResult?.textsSent ?? 0) > 0 },
             { icon:'📅', label:`${confirmResult?.calendarEvents ?? 0} calendar events created`, ok: true },
           ].map((item,i) => (
-            <div key={i} style={{ padding:'12px 16px', background:'#fff', borderRadius:10, border:'1px solid #E8E3DB', display:'flex', alignItems:'center', gap:10, fontSize:14, color:'#1A1A2E' }}>
+            <div key={i} style={{ padding:'12px 16px', background:item.ok === false ? '#FEF2F2' : '#fff', borderRadius:10, border:`1px solid ${item.ok === false ? '#FECACA' : '#E8E3DB'}`, display:'flex', alignItems:'center', gap:10, fontSize:14, color:item.ok === false ? '#DC2626' : '#1A1A2E' }}>
               <span style={{ fontSize:18 }}>{item.icon}</span> {item.label}
             </div>
           ))}
@@ -487,9 +493,19 @@ export default function MeetingPage() {
                           <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
                             {members.filter(m => m.type === 'adult').map(a => {
                               const sub      = submissions.find(s => s.memberId === a.id)
-                              const response = sub?.payload?.drivingResponses?.[sel.id]
+                              const isSchool = sel.id?.startsWith('school_')
+                              const schoolSlot = sel.id?.startsWith('school_drop_')
+                                ? 'am'
+                                : sel.id?.startsWith('school_pickup_')
+                                ? 'pm'
+                                : null
+                              const response = isSchool && schoolSlot
+                                ? sub?.payload?.schoolAvailability?.[WEEK[sel.dayIdx]]?.[schoolSlot]
+                                : sub?.payload?.drivingResponses?.[sel.id]
                               const responseLabel = response && typeof response === 'object'
                                 ? [response.dropoff ? 'drop-off' : null, response.pickup ? 'pick-up' : null].filter(Boolean).join(' + ')
+                                : isSchool && response === true
+                                ? schoolSlot === 'am' ? 'Available for drop-off' : 'Available for pick-up'
                                 : ''
                               const canDrive = response === true || (
                                 response && typeof response === 'object' &&
@@ -724,6 +740,11 @@ export default function MeetingPage() {
                   : <><CheckCircle size={16} /> Confirm &amp; Send</>
                 }
               </button>
+              {confirmError && (
+                <div style={{ marginTop:10, padding:'10px 12px', background:'rgba(239,68,68,0.18)', border:'1px solid rgba(252,165,165,0.35)', borderRadius:8, color:'#FCA5A5', fontSize:12, lineHeight:1.4 }}>
+                  {confirmError}
+                </div>
+              )}
             </div>
 
           </div>
