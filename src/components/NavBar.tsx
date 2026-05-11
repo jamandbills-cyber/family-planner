@@ -127,7 +127,6 @@ const navGroups: NavGroup[] = [
     items: [
       { href: '/admin', label: 'Setup', icon: Icon.Settings, active: p => p === '/admin' },
       { href: '/meeting', label: 'Meeting', icon: Icon.Users, active: p => p.startsWith('/meeting') },
-      { href: '/plan', label: 'Live Plan', shortLabel: 'Plan', icon: Icon.ClipboardList, active: p => p.startsWith('/plan') },
     ],
   },
 ]
@@ -183,6 +182,10 @@ export default function NavBar() {
 function SiteNav({ pathname, groups, mobileItems, onLogout }: {
   pathname: string; groups: NavGroup[]; mobileItems: NavItem[]; onLogout: () => void
 }) {
+  const dailyGroup = groups.find(group => group.label === 'Daily')
+  const menuGroups = groups.filter(group => group.label !== 'Daily')
+  const [openGroup, setOpenGroup] = useState<string | null>(null)
+
   return (
     <>
       <style>{`
@@ -192,6 +195,10 @@ function SiteNav({ pathname, groups, mobileItems, onLogout }: {
           .site-top-nav{display:block}
           .site-bottom-nav{display:none}
         }
+        .desktop-nav-menu{position:relative}
+        .desktop-nav-menu-panel{position:absolute;right:0;top:calc(100% + 8px);min-width:220px;background:#fff;color:#1A1A2E;border:1px solid #E8E3DB;border-radius:12px;padding:8px;z-index:120}
+        .desktop-nav-menu-link{display:flex;align-items:center;gap:9px;padding:10px 11px;border-radius:9px;text-decoration:none;color:#1A1A2E;font-size:13px;font-weight:650;white-space:nowrap}
+        .desktop-nav-menu-link:hover{background:#F7F4EF}
       `}</style>
       <header className="site-top-nav" style={{ background:'#1A1A2E', borderBottom:'1px solid #2A2A3E', color:'#fff', position:'sticky', top:0, zIndex:100 }}>
         <div style={{ maxWidth:1180, margin:'0 auto', padding:'12px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:18 }}>
@@ -199,21 +206,48 @@ function SiteNav({ pathname, groups, mobileItems, onLogout }: {
             <span style={{ fontFamily:"'Playfair Display',serif", fontSize:18, fontWeight:700 }}>Family Planner</span>
             <span style={{ fontSize:11, color:'#7070A0', letterSpacing:'0.08em', textTransform:'uppercase' }}>Home base</span>
           </Link>
-          <nav style={{ display:'flex', alignItems:'center', gap:22, flex:1, justifyContent:'center', overflowX:'auto', paddingBottom:2 }}>
-            {groups.map(group => (
-              <div key={group.label} style={{ display:'flex', alignItems:'center', gap:7 }}>
-                <span style={{ fontSize:10, color:'#7070A0', textTransform:'uppercase', letterSpacing:'0.1em', fontWeight:700, marginRight:2 }}>{group.label}</span>
-                {group.items.map(item => {
+          <nav aria-label="Main navigation" style={{ display:'flex', alignItems:'center', gap:10, flex:1, justifyContent:'center', minWidth:0 }}>
+            {dailyGroup?.items.map(item => {
+              const active = item.active(pathname)
+              return (
+                <Link key={`${item.href}-${item.label}`} href={item.href}
+                  style={{ textDecoration:'none', color:active ? '#FFE7DA' : 'rgba(255,255,255,0.68)', background:active ? 'rgba(255,231,218,0.12)' : 'transparent', border:`1px solid ${active ? 'rgba(255,231,218,0.22)' : 'transparent'}`, borderRadius:8, padding:'8px 10px', fontSize:13, fontWeight:active ? 700 : 600, whiteSpace:'nowrap' }}>
+                  {item.label}
+                </Link>
+              )
+            })}
+            {menuGroups.map(group => {
+              const isOpen = openGroup === group.label
+              const groupActive = group.items.some(item => item.active(pathname))
+              return (
+                <div key={group.label} className="desktop-nav-menu">
+                  <button type="button"
+                    onClick={() => setOpenGroup(isOpen ? null : group.label)}
+                    aria-expanded={isOpen}
+                    aria-haspopup="menu"
+                    style={{ background:groupActive ? 'rgba(255,231,218,0.12)' : 'rgba(255,255,255,0.06)', border:`1px solid ${groupActive ? 'rgba(255,231,218,0.22)' : 'rgba(255,255,255,0.12)'}`, color:groupActive ? '#FFE7DA' : 'rgba(255,255,255,0.74)', borderRadius:8, padding:'8px 10px', cursor:'pointer', fontFamily:"'DM Sans',sans-serif", fontSize:13, fontWeight:700, whiteSpace:'nowrap' }}>
+                    {group.label}
+                  </button>
+                  {isOpen && (
+                    <div className="desktop-nav-menu-panel" role="menu">
+                      {group.items.map(item => {
                   const active = item.active(pathname)
                   return (
                     <Link key={`${group.label}-${item.href}-${item.label}`} href={item.href}
-                      style={{ textDecoration:'none', color:active ? '#FFE7DA' : 'rgba(255,255,255,0.68)', background:active ? 'rgba(255,231,218,0.12)' : 'transparent', border:`1px solid ${active ? 'rgba(255,231,218,0.22)' : 'transparent'}`, borderRadius:8, padding:'7px 9px', fontSize:13, fontWeight:active ? 700 : 600, whiteSpace:'nowrap' }}>
+                      className="desktop-nav-menu-link"
+                      role="menuitem"
+                      onClick={() => setOpenGroup(null)}
+                      style={{ background:active ? '#F7F4EF' : 'transparent' }}>
+                      <span style={{ color:active ? '#C4522A' : '#8B8599', display:'flex' }}>{item.icon}</span>
                       {item.label}
                     </Link>
                   )
-                })}
-              </div>
-            ))}
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </nav>
           <button onClick={onLogout} style={{ background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.14)', color:'#B8B8D8', borderRadius:8, padding:'8px 10px', cursor:'pointer', fontFamily:"'DM Sans',sans-serif", fontSize:12, fontWeight:700 }}>
             Sign out
