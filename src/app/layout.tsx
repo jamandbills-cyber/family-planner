@@ -18,9 +18,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body style={{ paddingBottom: 80 }}>
-        {children}
+      <body style={{ margin: 0, paddingBottom: 80 }}>
         <NavBar />
+        {children}
       </body>
     </html>
   )

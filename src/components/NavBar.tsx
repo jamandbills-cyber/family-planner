@@ -6,14 +6,22 @@ import { useEffect, useState } from 'react'
 import { getSupabaseBrowser } from '@/lib/supabase-browser'
 
 type Role = 'admin' | 'member' | null
+type NavItem = {
+  href: string
+  label: string
+  shortLabel?: string
+  icon: React.ReactNode
+  active: (pathname: string) => boolean
+}
+type NavGroup = {
+  label: string
+  items: NavItem[]
+  adminOnly?: boolean
+}
 
 // Routes that should NOT show any nav at all
-// (login, device-token displays, tokenized forms)
-const HIDDEN_ON = ['/login', '/d/', '/form/']
-
-// Routes that belong to the OLD admin app (Sunday Planning).
-// These keep the original Setup / Meeting / Plan footer.
-const SUNDAY_PLANNING_ROUTES = ['/admin'] // exact /admin and the /meeting, /plan sub-views
+// (login/auth, device-token displays, tokenized forms, task kiosks)
+const HIDDEN_ON = ['/login', '/auth', '/d/', '/form/', '/i/', '/privacy', '/terms']
 
 const Icon = {
   Home: (
@@ -62,7 +70,75 @@ const Icon = {
       <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
     </svg>
   ),
+  Checklist: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 11 12 14 22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </svg>
+  ),
+  Lightbulb: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 18h6" />
+      <path d="M10 22h4" />
+      <path d="M12 2a7 7 0 0 0-4 12.74V16h8v-1.26A7 7 0 0 0 12 2z" />
+    </svg>
+  ),
+  Image: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="M21 15l-5-5L5 21" />
+    </svg>
+  ),
+  Screen: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="12" rx="2" />
+      <path d="M8 20h8" />
+      <path d="M12 16v4" />
+    </svg>
+  ),
 }
+
+const navGroups: NavGroup[] = [
+  {
+    label: 'Daily',
+    items: [
+      { href: '/dashboard', label: 'Dashboard', icon: Icon.Home, active: p => p === '/dashboard' },
+      { href: '/plan', label: 'Live Plan', shortLabel: 'Plan', icon: Icon.ClipboardList, active: p => p.startsWith('/plan') },
+      { href: '/profile', label: 'Profile', icon: Icon.User, active: p => p === '/profile' },
+    ],
+  },
+  {
+    label: 'Manage',
+    adminOnly: true,
+    items: [
+      { href: '/manage', label: 'Manage Home', shortLabel: 'Manage', icon: Icon.Settings, active: p => p === '/manage' },
+      { href: '/admin/tasks', label: 'Tasks', icon: Icon.Checklist, active: p => p.startsWith('/admin/tasks') },
+      { href: '/admin/projects', label: 'Projects', icon: Icon.ClipboardList, active: p => p.startsWith('/admin/projects') },
+      { href: '/admin/ideas', label: 'Ideas', icon: Icon.Lightbulb, active: p => p.startsWith('/admin/ideas') },
+      { href: '/admin/family', label: 'Family', icon: Icon.Users, active: p => p.startsWith('/admin/family') },
+      { href: '/admin/photos', label: 'Photos', icon: Icon.Image, active: p => p.startsWith('/admin/photos') },
+      { href: '/admin/devices', label: 'Devices', icon: Icon.Screen, active: p => p.startsWith('/admin/devices') },
+    ],
+  },
+  {
+    label: 'Sunday Planning',
+    adminOnly: true,
+    items: [
+      { href: '/admin', label: 'Setup', icon: Icon.Settings, active: p => p === '/admin' },
+      { href: '/meeting', label: 'Meeting', icon: Icon.Users, active: p => p.startsWith('/meeting') },
+      { href: '/plan', label: 'Live Plan', shortLabel: 'Plan', icon: Icon.ClipboardList, active: p => p.startsWith('/plan') },
+    ],
+  },
+]
+
+const mobileItems: NavItem[] = [
+  navGroups[0].items[0],
+  navGroups[0].items[1],
+  navGroups[1].items[1],
+  navGroups[1].items[0],
+  navGroups[0].items[2],
+]
 
 export default function NavBar() {
   const pathname = usePathname() ?? ''
@@ -87,121 +163,87 @@ export default function NavBar() {
   // Don't render on login, device displays, or tokenized forms
   if (HIDDEN_ON.some(p => pathname.startsWith(p))) return null
 
-  // For Sunday Planning routes (/admin exact, /meeting, /plan), show the OLD nav
-  // those pages depend on. Only the dashboard side gets the new nav.
-  const isSundayPlanningPage =
-    pathname === '/admin' ||
-    pathname.startsWith('/meeting') ||
-    pathname.startsWith('/plan')
-
-  if (isSundayPlanningPage) {
-    return <SundayPlanningNav pathname={pathname} />
-  }
-
   // For Supabase-authed pages, show the new role-aware nav.
   // If we don't know the user yet, render nothing to avoid flicker.
   if (!authChecked) return null
   if (!role) return null
 
-  return <DashboardNav pathname={pathname} role={role} onLogout={async () => {
+  const visibleGroups = navGroups.filter(group => !group.adminOnly || role === 'admin')
+  const visibleMobileItems = mobileItems.filter(item => {
+    const isAdminItem = navGroups.some(group => group.adminOnly && group.items.includes(item))
+    return !isAdminItem || role === 'admin'
+  })
+
+  return <SiteNav pathname={pathname} groups={visibleGroups} mobileItems={visibleMobileItems} onLogout={async () => {
     await fetch('/api/auth/logout', { method: 'POST' })
     router.push('/login')
   }} />
 }
 
-// ─── Dashboard nav (Supabase auth) ────────────────────────────
-function DashboardNav({ pathname, role, onLogout }: {
-  pathname: string; role: 'admin' | 'member'; onLogout: () => void
+function SiteNav({ pathname, groups, mobileItems, onLogout }: {
+  pathname: string; groups: NavGroup[]; mobileItems: NavItem[]; onLogout: () => void
 }) {
-  const items: Array<{ href: string; label: string; icon: React.ReactNode; active: boolean }> = [
-    { href: '/dashboard', label: 'Dashboard', icon: Icon.Home, active: pathname === '/dashboard' },
-    { href: '/profile',   label: 'Profile',   icon: Icon.User, active: pathname === '/profile' },
-  ]
-
-  if (role === 'admin') {
-    items.push({
-      href: '/manage', label: 'Manage', icon: Icon.Settings,
-      active: pathname.startsWith('/manage') || pathname.startsWith('/admin/family')
-              || pathname.startsWith('/admin/projects') || pathname.startsWith('/admin/devices')
-              || pathname.startsWith('/admin/tasks') || pathname.startsWith('/admin/ideas')
-              || pathname.startsWith('/admin/photos'),
-    })
-    items.push({
-      href: '/admin?from=dashboard', label: 'Sunday Plan', icon: Icon.Calendar, active: false,
-    })
-  }
-
   return (
-    <nav style={{
-      position: 'fixed', bottom: 0, left: 0, right: 0,
-      background: '#1A1A2E', borderTop: '1px solid #2A2A3E',
-      padding: '10px 8px', display: 'flex', justifyContent: 'space-around',
-      alignItems: 'center', zIndex: 100,
-      boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
-    }}>
-      {items.map(item => (
-        <Link key={item.href} href={item.href}
-          style={{
-            flex: 1, textAlign: 'center', textDecoration: 'none',
-            color: item.active ? '#FFE7DA' : '#7070A0',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-            padding: '6px 4px', fontFamily: "'DM Sans', sans-serif",
-            fontSize: 11, fontWeight: item.active ? 600 : 400,
-          }}>
-          {item.icon}
-          <span>{item.label}</span>
-        </Link>
-      ))}
-      <button onClick={onLogout}
-        style={{
-          flex: 1, background: 'none', border: 'none', cursor: 'pointer',
-          color: '#7070A0', display: 'flex', flexDirection: 'column',
-          alignItems: 'center', gap: 3, padding: '6px 4px',
-          fontFamily: "'DM Sans', sans-serif", fontSize: 11,
-        }}>
-        {Icon.Logout}
-        <span>Sign out</span>
-      </button>
-    </nav>
-  )
-}
-
-// ─── Sunday Planning nav (existing app, Google auth) ──────────
-function SundayPlanningNav({ pathname }: { pathname: string }) {
-  const items = [
-    { href: '/admin',    label: 'Setup',   icon: Icon.Settings,      active: pathname === '/admin' },
-    { href: '/meeting',  label: 'Meeting', icon: Icon.Users,         active: pathname.startsWith('/meeting') },
-    { href: '/plan',     label: 'Plan',    icon: Icon.ClipboardList, active: pathname.startsWith('/plan') },
-  ]
-
-  return (
-    <nav style={{
-      position: 'fixed', bottom: 0, left: 0, right: 0,
-      background: '#1A1A2E', borderTop: '1px solid #2A2A3E',
-      padding: '10px 8px', display: 'flex', justifyContent: 'space-around',
-      alignItems: 'center', zIndex: 100,
-    }}>
-      {items.map(item => (
-        <Link key={item.href} href={item.href}
-          style={{
-            flex: 1, textAlign: 'center', textDecoration: 'none',
-            color: item.active ? '#FFE7DA' : '#7070A0',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-            padding: '6px 4px', fontFamily: "'DM Sans', sans-serif",
-            fontSize: 11, fontWeight: item.active ? 600 : 400,
-          }}>
-          {item.icon}
-          <span>{item.label}</span>
-        </Link>
-      ))}
-      <Link href="/dashboard" style={{
-        flex: 1, textAlign: 'center', textDecoration: 'none', color: '#7070A0',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-        padding: '6px 4px', fontFamily: "'DM Sans', sans-serif", fontSize: 11,
+    <>
+      <style>{`
+        .site-top-nav{display:none}
+        .site-bottom-nav{display:flex}
+        @media (min-width: 1024px){
+          .site-top-nav{display:block}
+          .site-bottom-nav{display:none}
+        }
+      `}</style>
+      <header className="site-top-nav" style={{ background:'#1A1A2E', borderBottom:'1px solid #2A2A3E', color:'#fff', position:'sticky', top:0, zIndex:100 }}>
+        <div style={{ maxWidth:1180, margin:'0 auto', padding:'12px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:18 }}>
+          <Link href="/dashboard" style={{ textDecoration:'none', color:'#fff', display:'flex', flexDirection:'column', minWidth:150 }}>
+            <span style={{ fontFamily:"'Playfair Display',serif", fontSize:18, fontWeight:700 }}>Family Planner</span>
+            <span style={{ fontSize:11, color:'#7070A0', letterSpacing:'0.08em', textTransform:'uppercase' }}>Home base</span>
+          </Link>
+          <nav style={{ display:'flex', alignItems:'center', gap:22, flex:1, justifyContent:'center', overflowX:'auto', paddingBottom:2 }}>
+            {groups.map(group => (
+              <div key={group.label} style={{ display:'flex', alignItems:'center', gap:7 }}>
+                <span style={{ fontSize:10, color:'#7070A0', textTransform:'uppercase', letterSpacing:'0.1em', fontWeight:700, marginRight:2 }}>{group.label}</span>
+                {group.items.map(item => {
+                  const active = item.active(pathname)
+                  return (
+                    <Link key={`${group.label}-${item.href}-${item.label}`} href={item.href}
+                      style={{ textDecoration:'none', color:active ? '#FFE7DA' : 'rgba(255,255,255,0.68)', background:active ? 'rgba(255,231,218,0.12)' : 'transparent', border:`1px solid ${active ? 'rgba(255,231,218,0.22)' : 'transparent'}`, borderRadius:8, padding:'7px 9px', fontSize:13, fontWeight:active ? 700 : 600, whiteSpace:'nowrap' }}>
+                      {item.label}
+                    </Link>
+                  )
+                })}
+              </div>
+            ))}
+          </nav>
+          <button onClick={onLogout} style={{ background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.14)', color:'#B8B8D8', borderRadius:8, padding:'8px 10px', cursor:'pointer', fontFamily:"'DM Sans',sans-serif", fontSize:12, fontWeight:700 }}>
+            Sign out
+          </button>
+        </div>
+      </header>
+      <nav className="site-bottom-nav" style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        background: '#1A1A2E', borderTop: '1px solid #2A2A3E',
+        padding: '10px 8px', justifyContent: 'space-around',
+        alignItems: 'center', zIndex: 100,
+        boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
       }}>
-        {Icon.Home}
-        <span>Dashboard</span>
-      </Link>
-    </nav>
+        {mobileItems.map(item => {
+          const active = item.active(pathname)
+          return (
+            <Link key={`${item.href}-${item.label}`} href={item.href}
+              style={{
+                flex: 1, textAlign: 'center', textDecoration: 'none',
+                color: active ? '#FFE7DA' : '#7070A0',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                padding: '6px 4px', fontFamily: "'DM Sans', sans-serif",
+                fontSize: 11, fontWeight: active ? 600 : 400,
+              }}>
+              {item.icon}
+              <span>{item.shortLabel ?? item.label}</span>
+            </Link>
+          )
+        })}
+      </nav>
+    </>
   )
 }

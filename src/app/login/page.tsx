@@ -110,8 +110,8 @@ function LoginForm() {
         <a href="/admin"
           style={{ display: 'block', textAlign: 'center', color: '#8B8599', fontSize: 12,
                    textDecoration: 'none', fontFamily: 'inherit' }}>
-          Looking for Sunday Planning? <span style={{ color: '#C4522A', fontWeight: 600 }}>
-            Sign in with Google →
+          Admin setting up the weekly Sunday plan? <span style={{ color: '#C4522A', fontWeight: 600 }}>
+            Open Sunday Planning →
           </span>
         </a>
       </div>

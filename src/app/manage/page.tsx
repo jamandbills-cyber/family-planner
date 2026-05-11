@@ -78,9 +78,27 @@ export default async function ManagePage() {
     },
   ]
 
+  const sundayTiles = [
+    {
+      href: '/admin',
+      label: 'Sunday Setup',
+      desc: 'Choose transportation needs, dinners, deadlines, and planning links for the week.',
+    },
+    {
+      href: '/meeting',
+      label: 'Family Meeting',
+      desc: 'Review submissions, assign drivers, finish the agenda, and confirm the weekly plan.',
+    },
+    {
+      href: '/plan',
+      label: 'Live Plan',
+      desc: 'Open the current published plan that the family can bookmark.',
+    },
+  ]
+
   return (
     <AuthedLayout>
-      <div style={{ maxWidth: 720, margin: '40px auto', padding: 24, fontFamily: "'DM Sans', sans-serif" }}>
+      <div style={{ maxWidth: 900, margin: '40px auto', padding: 24, fontFamily: "'DM Sans', sans-serif" }}>
         <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 28, marginBottom: 6, color: '#1A1A2E' }}>
           Manage
         </h1>
@@ -88,7 +106,7 @@ export default async function ManagePage() {
           Family-wide settings. Anything you change here affects every dashboard.
         </p>
 
-        <div style={{ display: 'grid', gap: 12 }}>
+        <div style={{ display: 'grid', gap: 12, marginBottom: 28 }}>
           {tiles.map(t => (
             <Link key={t.href} href={t.href}
               style={{
@@ -109,15 +127,24 @@ export default async function ManagePage() {
           ))}
         </div>
 
-        <div style={{ marginTop: 36, padding: 16, background: '#FFFBEB',
-                      border: '1px solid #FDE68A', borderRadius: 8,
-                      fontSize: 13, color: '#92400E', lineHeight: 1.5 }}>
-          <strong>Heads up:</strong> Sunday Planning (the weekly meeting flow,
-          driving assignments, and SMS sends) lives at <code style={{
-            background: '#fff', padding: '1px 5px', borderRadius: 3,
-            fontSize: 12 }}>/admin</code> and uses a separate Google sign-in.
-          If you tap "Sunday Plan" in the bottom nav and get sent to a Google
-          login, that's expected.
+        <div style={{ padding: 18, background: '#FFFBEB',
+                      border: '1px solid #FDE68A', borderRadius: 12,
+                      color: '#92400E', lineHeight: 1.5 }}>
+          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
+            Sunday Planning
+          </div>
+          <p style={{ fontSize: 13, color: '#92400E', margin: '0 0 14px' }}>
+            Weekly setup, the Sunday meeting, and the live plan are grouped here because they use the Google Calendar planning flow.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
+            {sundayTiles.map(t => (
+              <Link key={t.href} href={t.href}
+                style={{ display: 'block', padding: 14, background: '#fff', border: '1px solid #FDE68A', borderRadius: 10, textDecoration: 'none', color: 'inherit' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E', marginBottom: 3 }}>{t.label}</div>
+                <div style={{ fontSize: 12, color: '#92400E' }}>{t.desc}</div>
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
     </AuthedLayout>
