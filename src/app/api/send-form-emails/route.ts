@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import { generateWeekTokens } from '@/lib/tokens'
 import { sendEmailWithResult } from '@/lib/gmail'
 import { getAppUrl } from '@/lib/app-url'
@@ -10,14 +8,6 @@ import { getPlanningMembers, savePlanningTokens } from '@/lib/planning-data'
 export async function POST(req: NextRequest) {
   const auth = await requireAdminMember()
   if (auth.response) return auth.response
-
-  const session = await getServerSession(authOptions)
-  if (!session?.accessToken) {
-    return NextResponse.json({ error: 'Google email access is not connected. Sign out and sign back in with Google from the admin page.' }, { status: 401 })
-  }
-  if (session.error) {
-    return NextResponse.json({ error: 'Google email access expired. Sign out and sign back in with Google from the admin page.' }, { status: 401 })
-  }
 
   let weekStart: string
   try {
@@ -92,7 +82,7 @@ export async function POST(req: NextRequest) {
     `
 
     try {
-      const result = await sendEmailWithResult(session.accessToken, {
+      const result = await sendEmailWithResult({
         to:      [member.email],
         subject: `Family Planning — your form is ready, ${t.name}`,
         html,
@@ -119,7 +109,7 @@ export async function POST(req: NextRequest) {
     error: sent.length === 0 && failed.length > 0
       ? firstError
         ? `No emails were sent. ${firstError}`
-        : 'No emails were sent. Check Google email authorization and family email addresses.'
+        : 'No emails were sent. Check Resend configuration and family email addresses.'
       : undefined,
   })
 }

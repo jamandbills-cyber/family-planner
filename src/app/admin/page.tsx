@@ -21,7 +21,7 @@ export default async function AdminPage() {
 
   const session = await getServerSession(authOptions)
 
-  // Sunday planning still needs Google OAuth for Calendar/Gmail access.
+  // Sunday planning still needs Google OAuth for Calendar access.
   if (!session) {
     redirect('/api/auth/signin')
   }

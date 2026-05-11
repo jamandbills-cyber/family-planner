@@ -14,10 +14,10 @@ export async function POST(req: NextRequest) {
 
   const session = await getServerSession(authOptions)
   if (!session?.accessToken) {
-    return NextResponse.json({ error: 'Google Calendar/Gmail access is not connected. Sign out and sign back in with Google from the admin page.' }, { status: 401 })
+    return NextResponse.json({ error: 'Google Calendar access is not connected. Sign out and sign back in with Google from the admin page.' }, { status: 401 })
   }
   if (session.error) {
-    return NextResponse.json({ error: 'Google Calendar/Gmail access expired. Sign out and sign back in with Google from the admin page.' }, { status: 401 })
+    return NextResponse.json({ error: 'Google Calendar access expired. Sign out and sign back in with Google from the admin page.' }, { status: 401 })
   }
 
   try {
@@ -42,14 +42,14 @@ export async function POST(req: NextRequest) {
     results.emailRecipients = emailAddresses.length
     if (emailAddresses.length > 0) {
       const html = buildWeeklyPlanEmail(plan)
-      const emailResult = await sendEmailWithResult(accessToken, {
+      const emailResult = await sendEmailWithResult({
         to:      emailAddresses,
         subject: `Family Plan: ${plan.weekLabel ?? weekStart}`,
         html,
       })
       results.emailSent = emailResult.ok
       if (!results.emailSent) {
-        results.emailError = emailResult.error ?? 'Gmail send failed. Reconnect Google from the admin page and confirm Gmail API access is enabled.'
+        results.emailError = emailResult.error ?? 'Resend email send failed. Confirm RESEND_API_KEY and EMAIL_FROM are configured in Vercel.'
       }
     } else {
       results.emailSent = false

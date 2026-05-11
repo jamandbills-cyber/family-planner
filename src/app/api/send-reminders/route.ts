@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import { sendSMS } from '@/lib/twilio'
 import { sendEmail } from '@/lib/gmail'
 import { getAppUrl } from '@/lib/app-url'
@@ -10,11 +8,6 @@ import { getLatestPlanningSubmissions, getPlanningMembers, getPlanningTokensForW
 export async function POST(req: NextRequest) {
   const auth = await requireAdminMember()
   if (auth.response) return auth.response
-
-  const session = await getServerSession(authOptions)
-  if (!session?.accessToken) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
 
   try {
     const { weekStart } = await req.json()
@@ -59,7 +52,7 @@ export async function POST(req: NextRequest) {
             <a href="${formUrl}" style="display:inline-block;background:#C4522A;color:#fff;text-decoration:none;border-radius:9px;padding:12px 24px;font-weight:700;margin:16px 0;">Fill out my form →</a>
           </div>
         `
-        sent = await sendEmail(session.accessToken, {
+        sent = await sendEmail({
           to: [member.email],
           subject: `Reminder: Family planning form due soon`,
           html,

@@ -1,89 +1,60 @@
-import { google } from 'googleapis'
-
 export type EmailSendResult = {
   ok: boolean
   error?: string
 }
 
-// ─── Send an email via Gmail API ─────────────────────────────
-// Uses the signed-in admin's Gmail account as the sender.
 export async function sendEmail(
-  accessToken: string,
   opts: {
     to: string[]
     subject: string
     html: string
   }
 ): Promise<boolean> {
-  const result = await sendEmailWithResult(accessToken, opts)
+  const result = await sendEmailWithResult(opts)
   return result.ok
 }
 
 export async function sendEmailWithResult(
-  accessToken: string,
   opts: {
     to: string[]
     subject: string
     html: string
   }
 ): Promise<EmailSendResult> {
+  const apiKey = process.env.RESEND_API_KEY
+  const from = process.env.EMAIL_FROM
+
+  if (!apiKey) return { ok: false, error: 'RESEND_API_KEY is not configured.' }
+  if (!from) return { ok: false, error: 'EMAIL_FROM is not configured.' }
+
   try {
-    const auth = new google.auth.OAuth2()
-    auth.setCredentials({ access_token: accessToken })
-    const gmail = google.gmail({ version: 'v1', auth })
-
-    const message = buildMimeMessage(opts)
-    const encoded = Buffer.from(message).toString('base64url')
-
-    await gmail.users.messages.send({
-      userId: 'me',
-      requestBody: { raw: encoded },
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from,
+        to: opts.to,
+        subject: opts.subject,
+        html: opts.html,
+      }),
     })
 
-    return { ok: true }
+    if (res.ok) return { ok: true }
+
+    const data = await res.json().catch(() => null)
+    return { ok: false, error: describeResendError(res.status, data) }
   } catch (err) {
-    console.error('Gmail send error:', err)
-    return { ok: false, error: describeGmailError(err) }
+    console.error('Resend email error:', err)
+    return { ok: false, error: err instanceof Error ? err.message : 'Unknown Resend error' }
   }
 }
 
-function describeGmailError(err: unknown): string {
-  if (!err || typeof err !== 'object') return 'Unknown Gmail API error'
-
-  const e = err as any
-  const status = e.code ?? e.status ?? e.response?.status
-  const apiError = e.response?.data?.error
-  const apiMessage = typeof apiError === 'string'
-    ? apiError
-    : apiError?.message
-  const nestedMessage = e.errors?.[0]?.message ?? apiError?.errors?.[0]?.message
-  const message = apiMessage ?? nestedMessage ?? e.message
-
-  if (status && message) return `Gmail API ${status}: ${message}`
-  if (message) return message
-  return 'Unknown Gmail API error'
-}
-
-// ─── Build MIME message ───────────────────────────────────────
-function buildMimeMessage(opts: { to: string[]; subject: string; html: string }): string {
-  const boundary = 'boundary_family_planner'
-  const encodedSubject = `=?UTF-8?B?${Buffer.from(opts.subject, 'utf8').toString('base64')}?=`
-  const encodedHtml = Buffer.from(opts.html, 'utf8').toString('base64').replace(/(.{76})/g, '$1\r\n')
-  const lines = [
-    `To: ${opts.to.join(', ')}`,
-    `Subject: ${encodedSubject}`,
-    'MIME-Version: 1.0',
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
-    '',
-    `--${boundary}`,
-    'Content-Type: text/html; charset=UTF-8',
-    'Content-Transfer-Encoding: base64',
-    '',
-    encodedHtml,
-    '',
-    `--${boundary}--`,
-  ]
-  return lines.join('\r\n')
+function describeResendError(status: number, data: any): string {
+  const message = data?.message ?? data?.error ?? data?.name
+  return message ? `Resend API ${status}: ${message}` : `Resend API ${status}: Email send failed.`
 }
 
 // ─── Build the weekly plan HTML email ────────────────────────

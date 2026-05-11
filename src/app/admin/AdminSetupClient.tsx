@@ -168,7 +168,7 @@ function TestLinksPanel({ weekStartKey }: { weekStartKey: string | null }) {
               </div>
             )}
             {emailStatus === 'error' && (
-              <p style={{ fontSize: 12, color: '#DC2626', marginTop: 6 }}>{errMsg || 'Failed to send emails. Check Gmail API scope — sign out and back in.'}</p>
+              <p style={{ fontSize: 12, color: '#DC2626', marginTop: 6 }}>{errMsg || 'Failed to send emails. Check Resend configuration.'}</p>
             )}
           </div>
 
