@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { generateWeekTokens } from '@/lib/tokens'
-import { sendEmail } from '@/lib/gmail'
+import { sendEmailWithResult } from '@/lib/gmail'
 import { getAppUrl } from '@/lib/app-url'
 import { requireAdminMember } from '@/lib/auth-helpers'
 import { getPlanningMembers, savePlanningTokens } from '@/lib/planning-data'
@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
   // Send emails
   const sent: string[] = []
   const failed: string[] = []
+  const errors: string[] = []
 
   for (const t of tokens) {
     const member = members.find((m: any) => m.id === t.memberId)
@@ -91,23 +92,34 @@ export async function POST(req: NextRequest) {
     `
 
     try {
-      const ok = await sendEmail(session.accessToken, {
+      const result = await sendEmailWithResult(session.accessToken, {
         to:      [member.email],
         subject: `Family Planning — your form is ready, ${t.name}`,
         html,
       })
-      if (ok) sent.push(t.name)
-      else failed.push(`${t.name} (send failed)`)
+      if (result.ok) {
+        sent.push(t.name)
+      } else {
+        const error = result.error ?? 'send failed'
+        failed.push(`${t.name} (${error})`)
+        errors.push(error)
+      }
     } catch (err) {
       console.error(`Email send failed for ${t.name}:`, err)
       failed.push(`${t.name} (error)`)
+      errors.push(err instanceof Error ? err.message : 'Unknown email error')
     }
   }
 
+  const firstError = errors[0]
   return NextResponse.json({
     success: failed.length === 0,
     sent,
     failed,
-    error: sent.length === 0 && failed.length > 0 ? 'No emails were sent. Check Google email authorization and family email addresses.' : undefined,
+    error: sent.length === 0 && failed.length > 0
+      ? firstError
+        ? `No emails were sent. ${firstError}`
+        : 'No emails were sent. Check Google email authorization and family email addresses.'
+      : undefined,
   })
 }

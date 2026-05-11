@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { sendEmail, buildWeeklyPlanEmail } from '@/lib/gmail'
+import { sendEmailWithResult, buildWeeklyPlanEmail } from '@/lib/gmail'
 import { sendSMS } from '@/lib/twilio'
 import { getAppUrl } from '@/lib/app-url'
 import { requireAdminMember } from '@/lib/auth-helpers'
@@ -42,13 +42,14 @@ export async function POST(req: NextRequest) {
     results.emailRecipients = emailAddresses.length
     if (emailAddresses.length > 0) {
       const html = buildWeeklyPlanEmail(plan)
-      results.emailSent = await sendEmail(accessToken, {
+      const emailResult = await sendEmailWithResult(accessToken, {
         to:      emailAddresses,
         subject: `Family Plan: ${plan.weekLabel ?? weekStart}`,
         html,
       })
+      results.emailSent = emailResult.ok
       if (!results.emailSent) {
-        results.emailError = 'Gmail send failed. Reconnect Google from the admin page and confirm Gmail API access is enabled.'
+        results.emailError = emailResult.error ?? 'Gmail send failed. Reconnect Google from the admin page and confirm Gmail API access is enabled.'
       }
     } else {
       results.emailSent = false

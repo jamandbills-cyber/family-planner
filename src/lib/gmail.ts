@@ -1,5 +1,10 @@
 import { google } from 'googleapis'
 
+export type EmailSendResult = {
+  ok: boolean
+  error?: string
+}
+
 // ─── Send an email via Gmail API ─────────────────────────────
 // Uses the signed-in admin's Gmail account as the sender.
 export async function sendEmail(
@@ -10,6 +15,18 @@ export async function sendEmail(
     html: string
   }
 ): Promise<boolean> {
+  const result = await sendEmailWithResult(accessToken, opts)
+  return result.ok
+}
+
+export async function sendEmailWithResult(
+  accessToken: string,
+  opts: {
+    to: string[]
+    subject: string
+    html: string
+  }
+): Promise<EmailSendResult> {
   try {
     const auth = new google.auth.OAuth2()
     auth.setCredentials({ access_token: accessToken })
@@ -23,11 +40,28 @@ export async function sendEmail(
       requestBody: { raw: encoded },
     })
 
-    return true
+    return { ok: true }
   } catch (err) {
     console.error('Gmail send error:', err)
-    return false
+    return { ok: false, error: describeGmailError(err) }
   }
+}
+
+function describeGmailError(err: unknown): string {
+  if (!err || typeof err !== 'object') return 'Unknown Gmail API error'
+
+  const e = err as any
+  const status = e.code ?? e.status ?? e.response?.status
+  const apiError = e.response?.data?.error
+  const apiMessage = typeof apiError === 'string'
+    ? apiError
+    : apiError?.message
+  const nestedMessage = e.errors?.[0]?.message ?? apiError?.errors?.[0]?.message
+  const message = apiMessage ?? nestedMessage ?? e.message
+
+  if (status && message) return `Gmail API ${status}: ${message}`
+  if (message) return message
+  return 'Unknown Gmail API error'
 }
 
 // ─── Build MIME message ───────────────────────────────────────
