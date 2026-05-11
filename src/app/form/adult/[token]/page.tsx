@@ -36,6 +36,7 @@ export default function AdultFormPage() {
   const [schoolAssignments, setSchoolAssignments] = useState<Record<string, { am: SchoolAssignment; pm: SchoolAssignment }>>({})
   const [submitted,   setSubmitted]   = useState(false)
   const [submitting,  setSubmitting]  = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [offEvents,   setOffEvents]   = useState<ReturnType<typeof emptyEvent>[]>([])
   const [topics,      setTopics]      = useState<string[]>([])
   const [newTopic,    setNewTopic]    = useState('')
@@ -102,15 +103,21 @@ export default function AdultFormPage() {
 
   const submit = async () => {
     setSubmitting(true)
+    setSubmitError(null)
     const payload = { drivingResponses: driveMap, schoolAvailability: schoolAvail, offCalendarEvents: offEvents, meetingTopics: topics }
     try {
-      await fetch('/api/submit/adult', {
+      const res = await fetch('/api/submit/adult', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, payload }),
       })
-    } catch (_) {}
-    setSubmitted(true)
-    setSubmitting(false)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? 'Could not submit your form')
+      setSubmitted(true)
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Could not submit your form')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (loading) return (
@@ -371,6 +378,11 @@ export default function AdultFormPage() {
         </div>
 
         {/* Submit */}
+        {submitError && (
+          <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', color:'#DC2626', borderRadius:10, padding:'10px 12px', fontSize:13, lineHeight:1.4 }}>
+            {submitError}
+          </div>
+        )}
         <button onClick={submit} disabled={submitting}
           style={{ width:'100%', background:'#1A1A2E', color:'#fff', border:'none', borderRadius:12, padding:'16px', fontSize:16, fontWeight:700, cursor:'pointer', fontFamily:"'DM Sans',sans-serif", display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
           <CheckCircle size={18} /> {submitting ? 'Submitting…' : 'Submit my info'}

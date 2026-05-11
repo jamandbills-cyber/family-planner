@@ -29,11 +29,16 @@ export async function POST(req: NextRequest) {
     }
 
     const reminded: string[] = []
+    const failed: string[] = []
 
     for (const member of notSubmitted) {
       const formType = member.type === 'child' ? 'kid' : 'adult'
       const tokenRow = tokens.find(t => t.memberId === member.id && t.formType === formType)
-      const formUrl  = tokenRow ? `${appUrl}/form/${formType}/${tokenRow.token}` : appUrl
+      if (!tokenRow) {
+        failed.push(`${member.name} (missing form link)`)
+        continue
+      }
+      const formUrl  = `${appUrl}/form/${formType}/${tokenRow.token}`
 
       const msg = `Hey ${member.name}! Reminder — please fill out the family weekly planner before the deadline:\n${formUrl}`
 
@@ -60,13 +65,17 @@ export async function POST(req: NextRequest) {
       }
 
       if (sent) reminded.push(member.name)
+      else failed.push(member.name)
     }
 
+    const success = reminded.length > 0 || notSubmitted.length === 0
     return NextResponse.json({
-      success: true,
+      success,
       reminded,
+      failed,
       notSubmitted: notSubmitted.map(m => m.name),
-    })
+      error: success ? undefined : 'No reminders were sent. Check phone numbers, Resend configuration, and generated form links.',
+    }, { status: success ? 200 : 502 })
   } catch (err) {
     console.error('Reminder error:', err)
     return NextResponse.json({ error: 'Failed to send reminders' }, { status: 500 })

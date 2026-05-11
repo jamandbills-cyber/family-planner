@@ -24,6 +24,8 @@ export default function LivePlanPage() {
       if (data.plan) {
         setPlan(data.plan)
         setLastCheck(new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }))
+      } else {
+        throw new Error('Missing plan data')
       }
     } catch {
       setError('load_failed')
@@ -72,7 +74,15 @@ export default function LivePlanPage() {
     </div>
   )
 
-  if (!plan) return null
+  if (!plan) return (
+    <div style={{ fontFamily:"'DM Sans',sans-serif", display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'#F7F4EF', padding:24 }}>
+      <style>{`*{box-sizing:border-box;margin:0;padding:0}`}</style>
+      <div style={{ textAlign:'center', maxWidth:360 }}>
+        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:700, color:'#1A1A2E', marginBottom:10 }}>Plan unavailable</div>
+        <button onClick={() => fetchPlan()} style={{ background:'#C4522A', color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontSize:14, fontWeight:600, cursor:'pointer' }}>Try again</button>
+      </div>
+    </div>
+  )
 
   return (
     <div style={{ fontFamily:"'DM Sans',sans-serif", background:'#F7F4EF', minHeight:'100vh' }}>
@@ -103,6 +113,11 @@ export default function LivePlanPage() {
       </div>
 
       <div style={{ maxWidth:600, margin:'0 auto', padding:'20px 16px 48px', display:'flex', flexDirection:'column', gap:14 }}>
+        {error === 'load_failed' && (
+          <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', color:'#DC2626', borderRadius:10, padding:'10px 12px', fontSize:13, lineHeight:1.4 }}>
+            Could not refresh the plan. Showing the last loaded version.
+          </div>
+        )}
 
         {/* Schedule — one card per day that has content */}
         <div className="card">

@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabase'
 export const dynamic = 'force-dynamic'
 
 // Returns a list of public URLs for all photos in the family-photos bucket.
-// Kitchen display polls this and rotates through them.
+// The current kitchen display receives photos through /api/dashboard/display.
 export async function GET() {
   const supabase = getSupabaseAdmin()
   const { data, error } = await supabase

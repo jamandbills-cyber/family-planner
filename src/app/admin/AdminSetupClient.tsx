@@ -495,12 +495,12 @@ function SendFormsButton({ weekStartKey }: { weekStartKey: string | null }) {
       )}
       {results.failed.length > 0 && (
         <div style={{ fontSize: 12, color: '#FCA5A5', marginTop: 4 }}>
-          Failed: {results.failed.join(', ')} — numbers must be in +18015551234 format in the Family sheet
+          Failed: {results.failed.join(', ')} — phone numbers must be in +18015551234 format on the family admin page
         </div>
       )}
       {results.sent.length === 0 && (
         <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 6 }}>
-          Open your Family sheet → check column D (phone) → format must be +1XXXXXXXXXX
+          Open Manage → Family and check that phone numbers use +1XXXXXXXXXX format.
         </div>
       )}
     </div>
@@ -531,11 +531,13 @@ function SendFormsButton({ weekStartKey }: { weekStartKey: string | null }) {
 // ─── Reminder Button ──────────────────────────────────────────
 function ReminderButton({ weekStartKey }: { weekStartKey: string | null }) {
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
-  const [result, setResult] = useState<{ reminded: string[]; notSubmitted: string[] } | null>(null)
+  const [result, setResult] = useState<{ reminded: string[]; notSubmitted: string[]; failed: string[] } | null>(null)
+  const [errMsg, setErrMsg] = useState('')
 
   const handleRemind = async () => {
     if (!weekStartKey) return
     setStatus('sending')
+    setErrMsg('')
     try {
       const res = await fetch('/api/send-reminders', {
         method: 'POST',
@@ -543,10 +545,11 @@ function ReminderButton({ weekStartKey }: { weekStartKey: string | null }) {
         body: JSON.stringify({ weekStart: weekStartKey }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
-      setResult({ reminded: data.reminded ?? [], notSubmitted: data.notSubmitted ?? [] })
+      if (!res.ok) throw new Error(data.error ?? 'Failed to send reminders')
+      setResult({ reminded: data.reminded ?? [], notSubmitted: data.notSubmitted ?? [], failed: data.failed ?? [] })
       setStatus('sent')
-    } catch {
+    } catch (e: any) {
+      setErrMsg(e.message ?? 'Failed to send reminders')
       setStatus('error')
     }
   }
@@ -555,19 +558,28 @@ function ReminderButton({ weekStartKey }: { weekStartKey: string | null }) {
     <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.06)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
       {result.notSubmitted.length === 0
         ? '✓ Everyone has submitted — no reminders needed!'
-        : `✓ Reminder sent to: ${result.reminded.join(', ') || 'none'}`
+        : result.reminded.length > 0
+        ? `✓ Reminder sent to: ${result.reminded.join(', ')}${result.failed.length ? ` · Failed: ${result.failed.join(', ')}` : ''}`
+        : `No reminders were sent${result.failed.length ? ` — failed: ${result.failed.join(', ')}` : ''}`
       }
     </div>
   )
 
   return (
-    <button onClick={handleRemind} disabled={status === 'sending' || !weekStartKey}
-      style={{ width: '100%', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.18)', borderRadius: 9, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-      {status === 'sending'
-        ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Sending reminders…</>
-        : <><AlertTriangle size={14} /> Send Deadline Reminders</>
-      }
-    </button>
+    <div>
+      <button onClick={handleRemind} disabled={status === 'sending' || !weekStartKey}
+        style={{ width: '100%', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)', border: '1.5px solid rgba(255,255,255,0.18)', borderRadius: 9, padding: '11px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        {status === 'sending'
+          ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Sending reminders…</>
+          : <><AlertTriangle size={14} /> Send Deadline Reminders</>
+        }
+      </button>
+      {status === 'error' && (
+        <div style={{ marginTop: 8, padding: '8px 12px', background: 'rgba(239,68,68,0.15)', borderRadius: 7, border: '1px solid rgba(239,68,68,0.3)', fontSize: 12, color: '#FCA5A5' }}>
+          {errMsg || 'Failed to send reminders.'}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -576,6 +588,19 @@ function MidWeekUpdateButton({ weekStartKey, events, dinner, agenda, weekLabel, 
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
 
   const WEEK = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+  const memberName = (id: string | null | undefined) => members.find((m: any) => m.id === id)?.name ?? ''
+  const driverForTransport = (evt: any, slot: 'dropoff' | 'pickup') => {
+    if (slot === 'dropoff') return evt.dropoffDriverId ?? evt.driverId ?? null
+    return evt.pickupDriverId ?? evt.driverId ?? null
+  }
+  const driverSummary = (evt: any) => {
+    if (evt.transportType === 'both') {
+      const drop = memberName(driverForTransport(evt, 'dropoff'))
+      const pick = memberName(driverForTransport(evt, 'pickup'))
+      return [drop ? `Drop: ${drop}` : null, pick ? `Pick: ${pick}` : null].filter(Boolean).join(' · ')
+    }
+    return memberName(evt.driverId ?? evt.dropoffDriverId ?? evt.pickupDriverId)
+  }
 
   const handleUpdate = async () => {
     if (!weekStartKey) return
@@ -587,7 +612,8 @@ function MidWeekUpdateButton({ weekStartKey, events, dinner, agenda, weekLabel, 
           .filter((e: any) => e.dayIdx === dayIdx && e.transportStatus !== 'unset')
           .map((e: any) => ({
             title: e.title, time: e.time, location: e.location ?? '',
-            driver: members.find((m: any) => m.id === e.driverId)?.name ?? '',
+            driver: driverSummary(e),
+            transportNote: e.transportStatus === 'no_transport' ? 'No transport needed' : '',
           }))
         return { day, events: dayEvents }
       })
@@ -666,7 +692,8 @@ export default function AdminSetupClient() {
     const fetchCount = async () => {
       try {
         const res  = await fetch(`/api/submissions?weekStart=${weekStartKey}`)
-        const data = await res.json()
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error ?? 'Failed to load submissions')
         setSubmissionCount(data.submissions?.length ?? 0)
       } catch {}
     }

@@ -39,7 +39,7 @@ function PickerContent() {
     const load = async () => {
       try {
         const res = await fetch(`/api/i/family?d=${encodeURIComponent(token)}`)
-        const data = await res.json()
+        const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error ?? 'Failed to load')
         setMembers(data.members ?? [])
       } catch (e: any) {
@@ -90,6 +90,11 @@ function PickerContent() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {members.length === 0 && (
+              <div style={{ padding: '18px', background: '#fff', border: '1px solid #E8E3DB', borderRadius: 14, color: '#8B8599', textAlign: 'center', fontSize: 14 }}>
+                No family members are available for this device.
+              </div>
+            )}
             {members.map(m => (
               <a key={m.id} href={`/i/${m.id}?d=${encodeURIComponent(token ?? '')}`}
                 style={{

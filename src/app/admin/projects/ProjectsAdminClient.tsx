@@ -36,20 +36,26 @@ export default function ProjectsAdminClient({ initialProjects, initialTasks, mem
   }
 
   const updateProject = async (id: string, patch: Partial<Project>) => {
-    const res = await fetch('/api/admin/projects', {
+    setErrMsg('')
+    const res = await fetch(`/api/admin/projects/${encodeURIComponent(id)}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, ...patch }),
+      body: JSON.stringify(patch),
     })
-    if (res.ok) setProjects(projects.map(p => p.id === id ? { ...p, ...patch } : p))
+    const data = await res.json().catch(() => ({}))
+    if (res.ok) setProjects(projects.map(p => p.id === id ? { ...p, ...(data.project ?? patch) } : p))
+    else setErrMsg(data.error ?? 'Failed to update project')
   }
 
   const archiveProject = async (id: string) => {
     if (!confirm('Archive this project? Tasks under it stop showing on dashboards.')) return
-    const res = await fetch('/api/admin/projects', {
+    setErrMsg('')
+    const res = await fetch(`/api/admin/projects/${encodeURIComponent(id)}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, status: 'archived' }),
+      body: JSON.stringify({ status: 'archived' }),
     })
+    const data = await res.json().catch(() => ({}))
     if (res.ok) setProjects(projects.filter(p => p.id !== id))
+    else setErrMsg(data.error ?? 'Failed to archive project')
   }
 
   const addTask = async (projectId: string, text: string, ownerId: string, dueDate: string | null) => {
@@ -65,20 +71,23 @@ export default function ProjectsAdminClient({ initialProjects, initialTasks, mem
   }
 
   const completeTask = async (id: string) => {
-    const res = await fetch('/api/admin/tasks', {
+    setErrMsg('')
+    const res = await fetch(`/api/admin/tasks/${encodeURIComponent(id)}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, completed_at: new Date().toISOString() }),
+      body: JSON.stringify({ completed: true }),
     })
+    const data = await res.json().catch(() => ({}))
     if (res.ok) setTasks(tasks.filter(t => t.id !== id))
+    else setErrMsg(data.error ?? 'Failed to complete task')
   }
 
   const deleteTask = async (id: string) => {
     if (!confirm('Delete this task?')) return
-    const res = await fetch('/api/admin/tasks', {
-      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
-    })
+    setErrMsg('')
+    const res = await fetch(`/api/admin/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    const data = await res.json().catch(() => ({}))
     if (res.ok) setTasks(tasks.filter(t => t.id !== id))
+    else setErrMsg(data.error ?? 'Failed to delete task')
   }
 
   const inputS: React.CSSProperties = {
@@ -91,6 +100,7 @@ export default function ProjectsAdminClient({ initialProjects, initialTasks, mem
       <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, marginBottom: 24 }}>
         Projects
       </h1>
+      {errMsg && <div style={{ color: '#DC2626', fontSize: 13, marginBottom: 12 }}>{errMsg}</div>}
 
       {projects.map(p => {
         const ownerMember = members.find(m => m.id === p.owner_id)

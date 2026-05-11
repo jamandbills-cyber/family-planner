@@ -69,8 +69,10 @@ function MemberContent() {
       ])
       const mData = await safeJson(mRes)
       const tData = await safeJson(tRes)
+      if (!mRes.ok) throw new Error(mData.error ?? 'Failed to load family members')
       if (!tRes.ok) throw new Error(tData.error ?? 'Failed to load tasks')
       const found = (mData.members ?? []).find((m: Member) => m.id === memberId)
+      if (!found) throw new Error('This family member is not available for this device')
       setMember(found ?? null)
       setTasks(tData.tasks ?? [])
     } catch (e: any) {

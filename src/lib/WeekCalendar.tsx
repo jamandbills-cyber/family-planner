@@ -190,6 +190,7 @@ export default function WeekCalendar({
   const [events,   setEvents]   = useState(initialEvents)
   const [syncedAt, setSyncedAt] = useState(initialSyncedAt)
   const [now, setNow] = useState(new Date())
+  const [pollError, setPollError] = useState<string | null>(null)
 
   // Re-sync state when props change (parent passing fresh data via polling)
   useEffect(() => { setEvents(initialEvents) }, [initialEvents])
@@ -205,12 +206,16 @@ export default function WeekCalendar({
     const fetchFresh = async () => {
       try {
         const res = await fetch('/api/dashboard/calendar')
-        if (!res.ok) return
+        if (!res.ok) throw new Error(`Calendar refresh failed (${res.status})`)
         const data = await res.json()
         setEvents(data.events ?? [])
         setSyncedAt(data.syncedAt ?? new Date().toISOString())
-      } catch {}
+        setPollError(null)
+      } catch (err) {
+        setPollError(err instanceof Error ? err.message : 'Calendar refresh failed')
+      }
     }
+    fetchFresh()
     const t = setInterval(fetchFresh, 60_000)
     return () => clearInterval(t)
   }, [poll])
@@ -321,6 +326,11 @@ export default function WeekCalendar({
       transition: 'background 0.5s, color 0.5s, border-color 0.5s',
       minHeight: 0, minWidth: 0,
     }}>
+      {pollError && (
+        <div style={{ marginBottom: 8, padding: '6px 9px', borderRadius: 8, background: isDark ? 'rgba(239,68,68,0.18)' : '#FEF2F2', border: `1px solid ${isDark ? 'rgba(252,165,165,0.35)' : '#FECACA'}`, color: isDark ? '#FCA5A5' : '#DC2626', fontSize: 11, fontWeight: 700 }}>
+          Showing last calendar data. {pollError}
+        </div>
+      )}
       <div style={{ display: 'grid',
                     gridTemplateColumns: `${s.leftColW} repeat(7, 1fr)`,
                     borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>

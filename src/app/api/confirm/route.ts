@@ -108,26 +108,51 @@ async function updateCalendarEvents(
       const isSchool       = isSchoolDrop || isSchoolPickup
 
       if (isSchool) {
-        // ── Create school events in Google Calendar ─────────────
+        // ── Upsert school events in Google Calendar ─────────────
         if (!evt.time) continue
 
         const times = parseTimeStr(evt.time, dateStr)
         if (!times) continue
 
         try {
-          await calendar.events.insert({
+          const listRes = await calendar.events.list({
             calendarId,
-            requestBody: {
-              summary:     evt.title,
-              description: evt.driver ? `🚗 Driver: ${evt.driver}` : 'Driver TBD',
-              start:       { dateTime: times.start, timeZone: 'America/Denver' },
-              end:         { dateTime: times.end,   timeZone: 'America/Denver' },
-              colorId:     '7', // blue/peacock for school
-            },
+            timeMin: `${dateStr}T00:00:00-06:00`,
+            timeMax: `${dateStr}T23:59:59-06:00`,
+            q:       evt.title,
+            singleEvents: true,
+            maxResults: 10,
           })
-          created++
+          const existing = listRes.data.items?.find(e => {
+            const calTitle = (e.summary ?? '').toLowerCase()
+            const evtTitle = evt.title.toLowerCase()
+            return calTitle.includes(evtTitle) || evtTitle.includes(calTitle)
+          })
+
+          const requestBody = {
+            summary:     evt.title,
+            description: evt.driver ? `🚗 Driver: ${evt.driver}` : 'Driver TBD',
+            start:       { dateTime: times.start, timeZone: 'America/Denver' },
+            end:         { dateTime: times.end,   timeZone: 'America/Denver' },
+            colorId:     '7', // blue/peacock for school
+          }
+
+          if (existing?.id) {
+            await calendar.events.patch({
+              calendarId,
+              eventId: existing.id,
+              requestBody,
+            })
+            updated++
+          } else {
+            await calendar.events.insert({
+              calendarId,
+              requestBody,
+            })
+            created++
+          }
         } catch (err) {
-          console.error('School event create error:', err)
+          console.error('School event upsert error:', err)
         }
 
       } else if (evt.driver) {

@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     if (!owner_id || !name) {
       return NextResponse.json({ error: 'owner_id and name required' }, { status: 400 })
     }
-    const insert: any = { owner_id, name }
+    const insert: any = { owner_id, name, is_shared: body.is_shared ?? false }
     if (color !== null) insert.color = color
 
     const supabase = getSupabaseAdmin()

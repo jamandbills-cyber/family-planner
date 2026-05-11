@@ -31,22 +31,26 @@ export default function FamilyAdminClient({ initialMembers }: { initialMembers: 
   }
 
   const updateMember = async (id: string, patch: Partial<FamilyMember>) => {
-    const res = await fetch('/api/admin/family', {
+    setErrMsg('')
+    const res = await fetch(`/api/admin/family/${encodeURIComponent(id)}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, ...patch }),
+      body: JSON.stringify(patch),
     })
+    const data = await res.json().catch(() => ({}))
     if (res.ok) {
-      setMembers(members.map(m => m.id === id ? { ...m, ...patch } : m))
+      setMembers(members.map(m => m.id === id ? { ...m, ...(data.member ?? patch) } : m))
+    } else {
+      setErrMsg(data.error ?? 'Failed to update member')
     }
   }
 
   const deleteMember = async (id: string) => {
     if (!confirm('Delete this member? This removes their account too.')) return
-    const res = await fetch('/api/admin/family', {
-      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
-    })
+    setErrMsg('')
+    const res = await fetch(`/api/admin/family/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    const data = await res.json().catch(() => ({}))
     if (res.ok) setMembers(members.filter(m => m.id !== id))
+    else setErrMsg(data.error ?? 'Failed to delete member')
   }
 
   const inputS: React.CSSProperties = {
@@ -57,6 +61,7 @@ export default function FamilyAdminClient({ initialMembers }: { initialMembers: 
   return (
     <div style={{ maxWidth: 1100, margin: '40px auto', padding: 24, fontFamily: "'DM Sans', sans-serif" }}>
       <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, marginBottom: 24 }}>Family roster</h1>
+      {errMsg && <div style={{ color: '#DC2626', fontSize: 13, marginBottom: 12 }}>{errMsg}</div>}
 
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginBottom: 24 }}>
         <thead>

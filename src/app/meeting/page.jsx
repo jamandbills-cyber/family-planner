@@ -30,6 +30,7 @@ export default function MeetingPage() {
   const [confirmResult, setConfirmResult] = useState(null)
   const [confirmError, setConfirmError] = useState('')
   const [updateSent,  setUpdateSent]  = useState(false)
+  const [updateError, setUpdateError] = useState('')
 
   // ─── Load everything from APIs ────────────────────────────
   const loadData = useCallback(async () => {
@@ -38,13 +39,15 @@ export default function MeetingPage() {
     try {
       // Load family members
       const famRes = await fetch('/api/family')
-      const famData = await famRes.json()
+      const famData = await famRes.json().catch(() => ({}))
+      if (!famRes.ok) throw new Error(famData.error ?? 'Failed to load family members')
       const memberList = famData.members ?? []
       setMembers(memberList)
 
       // Load admin state (this week's calendar + setup)
       const calRes = await fetch('/api/calendar')
-      const calData = await calRes.json()
+      const calData = await calRes.json().catch(() => ({}))
+      if (!calRes.ok) throw new Error(calData.error ?? 'Failed to load calendar')
 
       if (calData.events) setEvents(calData.events)
       if (calData.weekStart) {
@@ -52,17 +55,21 @@ export default function MeetingPage() {
 
         // Load saved admin state for this week
         const stateRes = await fetch(`/api/admin-state?weekStart=${calData.weekStart}`)
-        const stateData = await stateRes.json()
+        const stateData = await stateRes.json().catch(() => ({}))
+        if (!stateRes.ok) throw new Error(stateData.error ?? 'Failed to load saved week state')
+        let savedShopping = null
         if (stateData.found && stateData.state) {
           const s = stateData.state
           if (s.events?.length) setEvents(s.events)
           if (s.dinner)         setDinner(s.dinner)
           if (s.agenda)         setAgenda(s.agenda)
+          if (s.shopping)       savedShopping = s.shopping
         }
 
         // Load form submissions
         const subRes = await fetch(`/api/submissions?weekStart=${calData.weekStart}`)
-        const subData = await subRes.json()
+        const subData = await subRes.json().catch(() => ({}))
+        if (!subRes.ok) throw new Error(subData.error ?? 'Failed to load form submissions')
         if (subData.submissions) {
           setSubmissions(subData.submissions)
           // Merge shopping items from all kid submissions
@@ -82,7 +89,7 @@ export default function MeetingPage() {
               })
             }
           })
-          setShopping(allShopping)
+          setShopping(savedShopping ?? allShopping)
         }
 
         // Build weekLabel
@@ -91,7 +98,7 @@ export default function MeetingPage() {
         setWeekLabel(`Week of ${d.toLocaleDateString('en-US', { month:'short', day:'numeric' })} – ${end.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })}`)
       }
     } catch (err) {
-      setError('Failed to load meeting data. Make sure you have loaded the calendar in admin setup.')
+      setError(err instanceof Error ? err.message : 'Failed to load meeting data. Make sure you have loaded the calendar in admin setup.')
     } finally {
       setLoading(false)
     }
@@ -121,6 +128,18 @@ export default function MeetingPage() {
     return getMember(evt.driverId ?? evt.dropoffDriverId ?? evt.pickupDriverId)?.name ?? ''
   }
 
+  const persistMeetingState = useCallback((patch = {}) => {
+    if (!weekStart) return
+    fetch('/api/admin-state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        weekStart,
+        state: { events, dinner, agenda, shopping, ...patch }
+      })
+    }).catch(() => {})
+  }, [weekStart, events, dinner, agenda, shopping])
+
   const assignDriver = (eventId, val, slot) => {
     setEvents(evs => {
       const updated = evs.map(e => {
@@ -136,7 +155,7 @@ export default function MeetingPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             weekStart,
-            state: { events: updated, dinner, agenda }
+            state: { events: updated, dinner, agenda, shopping }
           })
         }).catch(() => {})
       }
@@ -145,24 +164,51 @@ export default function MeetingPage() {
   }
 
   const toggleShopping = id =>
-    setShopping(s => s.map(i => i.id === id ? { ...i, checked: !i.checked } : i))
+    setShopping(s => {
+      const next = s.map(i => i.id === id ? { ...i, checked: !i.checked } : i)
+      persistMeetingState({ shopping: next })
+      return next
+    })
+
+  const removeShoppingItem = id =>
+    setShopping(s => {
+      const next = s.filter(i => i.id !== id)
+      persistMeetingState({ shopping: next })
+      return next
+    })
 
   const addShoppingItem = () => {
     if (!newItem.trim()) return
-    setShopping(s => [...s, { id: 'manual-'+Date.now(), item: newItem.trim(), qty: '1', who: 'Admin', checked: false }])
+    setShopping(s => {
+      const next = [...s, { id: 'manual-'+Date.now(), item: newItem.trim(), qty: '1', who: 'Admin', checked: false }]
+      persistMeetingState({ shopping: next })
+      return next
+    })
     setNewItem('')
   }
 
   const addAgendaItem = () => {
     if (!newAgenda.trim()) return
-    setAgenda(a => [...a, newAgenda.trim()])
+    setAgenda(a => {
+      const next = [...a, newAgenda.trim()]
+      persistMeetingState({ agenda: next })
+      return next
+    })
     setNewAgenda('')
   }
+
+  const removeAgendaItem = idx =>
+    setAgenda(a => {
+      const next = a.filter((_, j) => j !== idx)
+      persistMeetingState({ agenda: next })
+      return next
+    })
 
   const addOffCalEventToCalendar = (offEvt, memberId) => {
     const dayIdx = WEEK.indexOf(offEvt.day)
     if (dayIdx === -1) return
-    setEvents(evs => [...evs, {
+    setEvents(evs => {
+      const next = [...evs, {
       id: 'off-' + Date.now(),
       title: offEvt.what,
       dayIdx,
@@ -173,7 +219,10 @@ export default function MeetingPage() {
       transportStatus: offEvt.needsRide ? 'needs_driver' : 'no_transport',
       driverId: null,
       carpoolNote: '',
-    }])
+      }]
+      persistMeetingState({ events: next })
+      return next
+    })
   }
 
   // Build the plan object for confirm
@@ -231,16 +280,21 @@ export default function MeetingPage() {
 
   const handleSendUpdate = async () => {
     if (!weekStart) return
+    setUpdateError('')
     try {
       const plan = buildPlan()
-      await fetch('/api/confirm', {
+      const res = await fetch('/api/confirm', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ weekStart, plan }),
       })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? 'Update failed')
       setUpdateSent(true)
       setTimeout(() => setUpdateSent(false), 4000)
-    } catch (_) {}
+    } catch (err) {
+      setUpdateError(err instanceof Error ? err.message : 'Update failed')
+    }
   }
 
   const gaps  = events.filter(e => e.transportStatus === 'needs_driver' && !isTransportCovered(e))
@@ -300,7 +354,7 @@ export default function MeetingPage() {
           {[
             { icon:'✉', label: confirmResult?.emailSent ? `Email sent to ${confirmResult?.emailRecipients ?? members.filter(m=>m.email).length} family members` : `Email not sent${confirmResult?.emailError ? `: ${confirmResult.emailError}` : ''}`, ok: confirmResult?.emailSent },
             { icon:'📱', label:`Texts sent to ${confirmResult?.textsSent ?? 0} family members`, ok: (confirmResult?.textsSent ?? 0) > 0 },
-            { icon:'📅', label:`${confirmResult?.calendarEvents ?? 0} calendar events created`, ok: true },
+            { icon:'📅', label:`${confirmResult?.calendarCreated ?? 0} calendar events created · ${confirmResult?.calendarUpdated ?? 0} updated`, ok: true },
           ].map((item,i) => (
             <div key={i} style={{ padding:'12px 16px', background:item.ok === false ? '#FEF2F2' : '#fff', borderRadius:10, border:`1px solid ${item.ok === false ? '#FECACA' : '#E8E3DB'}`, display:'flex', alignItems:'center', gap:10, fontSize:14, color:item.ok === false ? '#DC2626' : '#1A1A2E' }}>
               <span style={{ fontSize:18 }}>{item.icon}</span> {item.label}
@@ -311,6 +365,11 @@ export default function MeetingPage() {
           style={{ display:'flex', alignItems:'center', gap:7, padding:'11px 22px', background:'#1A1A2E', color:'#fff', border:'none', borderRadius:9, fontSize:14, fontWeight:600, cursor:'pointer', fontFamily:"'DM Sans',sans-serif", margin:'0 auto' }}>
           <Send size={14} /> Send Mid-Week Update
         </button>
+        {updateError && (
+          <div style={{ marginTop:10, padding:'10px 12px', background:'#FEF2F2', border:'1px solid #FECACA', color:'#DC2626', borderRadius:8, fontSize:12, lineHeight:1.4 }}>
+            {updateError}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -343,6 +402,7 @@ export default function MeetingPage() {
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
             {updateSent && <span style={{ fontSize:13, color:'#4ADE80', display:'flex', alignItems:'center', gap:5 }}><CheckCircle size={13} /> Update sent!</span>}
+            {updateError && <span style={{ fontSize:13, color:'#FCA5A5' }}>{updateError}</span>}
             <button onClick={loadData}
               style={{ background:'rgba(255,255,255,0.08)', border:'1.5px solid rgba(255,255,255,0.15)', color:'#fff', borderRadius:8, padding:'9px 16px', fontSize:13, fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', gap:6, fontFamily:"'DM Sans',sans-serif" }}>
               <RefreshCw size={13} /> Refresh
@@ -584,7 +644,7 @@ export default function MeetingPage() {
                             {item.qty !== '1' ? `${item.qty} × ` : ''}{item.item}
                           </span>
                           <span style={{ fontSize:11, color:'#8B8599' }}>from {item.who}</span>
-                          <button className="btn-ghost" onClick={() => setShopping(s => s.filter(i => i.id !== item.id))}><X size={12} /></button>
+                          <button className="btn-ghost" onClick={() => removeShoppingItem(item.id)}><X size={12} /></button>
                         </div>
                       ))}
                     </div>
@@ -626,10 +686,9 @@ export default function MeetingPage() {
                     const sub = submissions.find(s => s.memberId === member.id)
                     const offEvents = sub?.payload?.offCalendarEvents ?? []
                     const topics    = sub?.payload?.meetingTopics ?? []
-                    const unavailable = sub?.payload?.unavailableDays ?? []
                     return (
                       <div key={member.id} style={{ padding:'10px 12px', background: !sub?'#FEF2F2':'#FAFAF7', borderRadius:9, border:`1px solid ${!sub?'#FECACA':'#EDE8E0'}` }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom: (offEvents.length||topics.length||unavailable.length)?8:0 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom: (offEvents.length||topics.length)?8:0 }}>
                           <span style={{ width:22, height:22, borderRadius:'50%', background:member.color, color:'#fff', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                             {member.name[0]}
                           </span>
@@ -661,11 +720,6 @@ export default function MeetingPage() {
                             💬 {t}
                           </div>
                         ))}
-                        {unavailable.length > 0 && (
-                          <div style={{ marginTop:5, fontSize:12, color:'#DC2626', padding:'5px 8px', background:'#FEF2F2', borderRadius:5 }}>
-                            ✗ Out: {unavailable.join(', ')}
-                          </div>
-                        )}
                       </div>
                     )
                   })}
@@ -686,7 +740,7 @@ export default function MeetingPage() {
                   <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 10px', marginBottom:5, background:'#F7F4EF', borderRadius:7 }}>
                     <span style={{ fontSize:12, color:'#C4522A', fontWeight:700, minWidth:18 }}>{i+1}.</span>
                     <span style={{ fontSize:13, color:'#1A1A2E', flex:1 }}>{item}</span>
-                    <button className="btn-ghost" onClick={() => setAgenda(a => a.filter((_,j) => j !== i))}><X size={12} /></button>
+                    <button className="btn-ghost" onClick={() => removeAgendaItem(i)}><X size={12} /></button>
                   </div>
                 ))}
                 {/* Topics submitted via forms */}

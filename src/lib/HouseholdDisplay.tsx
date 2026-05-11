@@ -552,6 +552,7 @@ export default function HouseholdDisplay({ initialData, orientation, deviceToken
   const [photoIdx, setPhotoIdx] = useState(0)
   const [photoVisible, setPhotoVisible] = useState(true)
   const [vp, setVp] = useState({ w: 1920, h: 1080 })
+  const [refreshError, setRefreshError] = useState<string | null>(null)
 
   useEffect(() => { setData(initialData) }, [initialData])
 
@@ -564,11 +565,15 @@ export default function HouseholdDisplay({ initialData, orientation, deviceToken
     const refresh = async () => {
       try {
         const res = await fetch('/api/dashboard/display')
-        if (!res.ok) return
+        if (!res.ok) throw new Error(`Display refresh failed (${res.status})`)
         const fresh = await res.json()
         setData(fresh)
-      } catch {}
+        setRefreshError(null)
+      } catch (err) {
+        setRefreshError(err instanceof Error ? err.message : 'Display refresh failed')
+      }
     }
+    refresh()
     const t = setInterval(refresh, 60_000)
     return () => clearInterval(t)
   }, [])
@@ -601,16 +606,23 @@ export default function HouseholdDisplay({ initialData, orientation, deviceToken
   const theme = buildTheme(isDark)
 
   const shell = (
-    <DisplayShell
-      data={data}
-      now={now}
-      theme={theme}
-      isDark={isDark}
-      orientation={orientation}
-      photoIdx={photoIdx}
-      photoVisible={photoVisible}
-      deviceToken={deviceToken}
-    />
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <DisplayShell
+        data={data}
+        now={now}
+        theme={theme}
+        isDark={isDark}
+        orientation={orientation}
+        photoIdx={photoIdx}
+        photoVisible={photoVisible}
+        deviceToken={deviceToken}
+      />
+      {refreshError && (
+        <div style={{ position: 'absolute', right: 14, bottom: 14, zIndex: 5, maxWidth: 420, padding: '8px 12px', borderRadius: 10, background: isDark ? 'rgba(127,29,29,0.9)' : 'rgba(254,242,242,0.96)', border: `1px solid ${isDark ? 'rgba(252,165,165,0.45)' : '#FECACA'}`, color: isDark ? '#FCA5A5' : '#DC2626', fontSize: 12, fontWeight: 700 }}>
+          Showing last display data. {refreshError}
+        </div>
+      )}
+    </div>
   )
 
   if (orientation !== 'portrait') return shell
