@@ -5,6 +5,23 @@ import { addDays, addWeeks, format, startOfWeek } from 'date-fns'
 import type { DashboardCalendarEvent, WeekRange } from '@/lib/types/calendar'
 import { getSundayPlan } from '@/lib/sunday-plan'
 
+const HOUSEHOLD_TIME_ZONE = process.env.HOUSEHOLD_TIME_ZONE ?? 'America/Denver'
+
+function getHouseholdToday(timeZone: string = HOUSEHOLD_TIME_ZONE) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+
+  const year = Number(parts.find(p => p.type === 'year')?.value)
+  const month = Number(parts.find(p => p.type === 'month')?.value)
+  const day = Number(parts.find(p => p.type === 'day')?.value)
+
+  return new Date(year, month - 1, day)
+}
+
 function getGoogleCalendarAuth() {
   const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY!)
   return new google.auth.GoogleAuth({
@@ -111,9 +128,9 @@ function isSchoolish(title: string, id?: string) {
 
 export async function fetchWeekCalendar(weekOffset: number = 0): Promise<WeekRange> {
   const calendarId = process.env.GOOGLE_CALENDAR_ID ?? 'primary'
-  const displayStart = new Date(addWeeks(new Date(), weekOffset).toDateString())
+  const displayStart = addWeeks(getHouseholdToday(), weekOffset)
   const displayEnd = addDays(displayStart, 6)
-  const displayMax = addDays(displayStart, 7)
+  const displayMax = addDays(displayStart, 8)
   const displayStartStr = format(displayStart, 'yyyy-MM-dd')
 
   const auth = getGoogleCalendarAuth()
