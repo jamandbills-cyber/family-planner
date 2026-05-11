@@ -18,9 +18,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body style={{ margin: 0, paddingBottom: 80 }}>
+      <body>
+        <a className="skip-link" href="#main-content">Skip to main content</a>
         <NavBar />
-        {children}
+        <main id="main-content">
+          {children}
+        </main>
       </body>
     </html>
   )

@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { getSupabaseBrowser } from '@/lib/supabase-browser'
 
 type Role = 'admin' | 'member' | null
@@ -185,6 +185,15 @@ function SiteNav({ pathname, groups, mobileItems, onLogout }: {
   const dailyGroup = groups.find(group => group.label === 'Daily')
   const menuGroups = groups.filter(group => group.label !== 'Daily')
   const [openGroup, setOpenGroup] = useState<string | null>(null)
+  const menuRootId = useId()
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenGroup(null)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [])
 
   return (
     <>
@@ -196,11 +205,11 @@ function SiteNav({ pathname, groups, mobileItems, onLogout }: {
           .site-bottom-nav{display:none}
         }
         .desktop-nav-menu{position:relative}
-        .desktop-nav-menu-panel{position:absolute;right:0;top:calc(100% + 8px);min-width:220px;background:#fff;color:#1A1A2E;border:1px solid #E8E3DB;border-radius:12px;padding:8px;z-index:120}
-        .desktop-nav-menu-link{display:flex;align-items:center;gap:9px;padding:10px 11px;border-radius:9px;text-decoration:none;color:#1A1A2E;font-size:13px;font-weight:650;white-space:nowrap}
-        .desktop-nav-menu-link:hover{background:#F7F4EF}
+        .desktop-nav-menu-panel{position:absolute;right:0;top:calc(100% + 8px);min-width:220px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-lg);padding:8px;z-index:120}
+        .desktop-nav-menu-link{display:flex;align-items:center;gap:9px;padding:10px 11px;border-radius:var(--radius-md);text-decoration:none;color:var(--text);font-size:13px;font-weight:650;white-space:nowrap}
+        .desktop-nav-menu-link:hover{background:var(--bg)}
       `}</style>
-      <header className="site-top-nav" style={{ background:'#1A1A2E', borderBottom:'1px solid #2A2A3E', color:'#fff', position:'sticky', top:0, zIndex:100 }}>
+      <header className="site-top-nav" style={{ background:'var(--navy)', borderBottom:'1px solid var(--navy-soft)', color:'#fff', position:'sticky', top:0, zIndex:100 }}>
         <div style={{ maxWidth:1180, margin:'0 auto', padding:'12px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:18 }}>
           <Link href="/dashboard" style={{ textDecoration:'none', color:'#fff', display:'flex', flexDirection:'column', minWidth:150 }}>
             <span style={{ fontFamily:"'Playfair Display',serif", fontSize:18, fontWeight:700 }}>Family Planner</span>
@@ -211,6 +220,7 @@ function SiteNav({ pathname, groups, mobileItems, onLogout }: {
               const active = item.active(pathname)
               return (
                 <Link key={`${item.href}-${item.label}`} href={item.href}
+                  aria-current={active ? 'page' : undefined}
                   style={{ textDecoration:'none', color:active ? '#FFE7DA' : 'rgba(255,255,255,0.68)', background:active ? 'rgba(255,231,218,0.12)' : 'transparent', border:`1px solid ${active ? 'rgba(255,231,218,0.22)' : 'transparent'}`, borderRadius:8, padding:'8px 10px', fontSize:13, fontWeight:active ? 700 : 600, whiteSpace:'nowrap' }}>
                   {item.label}
                 </Link>
@@ -219,26 +229,29 @@ function SiteNav({ pathname, groups, mobileItems, onLogout }: {
             {menuGroups.map(group => {
               const isOpen = openGroup === group.label
               const groupActive = group.items.some(item => item.active(pathname))
+              const menuId = `${menuRootId}-${group.label.toLowerCase().replace(/\s+/g, '-')}`
               return (
                 <div key={group.label} className="desktop-nav-menu">
                   <button type="button"
                     onClick={() => setOpenGroup(isOpen ? null : group.label)}
                     aria-expanded={isOpen}
                     aria-haspopup="menu"
+                    aria-controls={menuId}
                     style={{ background:groupActive ? 'rgba(255,231,218,0.12)' : 'rgba(255,255,255,0.06)', border:`1px solid ${groupActive ? 'rgba(255,231,218,0.22)' : 'rgba(255,255,255,0.12)'}`, color:groupActive ? '#FFE7DA' : 'rgba(255,255,255,0.74)', borderRadius:8, padding:'8px 10px', cursor:'pointer', fontFamily:"'DM Sans',sans-serif", fontSize:13, fontWeight:700, whiteSpace:'nowrap' }}>
                     {group.label}
                   </button>
                   {isOpen && (
-                    <div className="desktop-nav-menu-panel" role="menu">
+                    <div className="desktop-nav-menu-panel" id={menuId} role="menu" aria-label={group.label}>
                       {group.items.map(item => {
                   const active = item.active(pathname)
                   return (
                     <Link key={`${group.label}-${item.href}-${item.label}`} href={item.href}
                       className="desktop-nav-menu-link"
+                      aria-current={active ? 'page' : undefined}
                       role="menuitem"
                       onClick={() => setOpenGroup(null)}
-                      style={{ background:active ? '#F7F4EF' : 'transparent' }}>
-                      <span style={{ color:active ? '#C4522A' : '#8B8599', display:'flex' }}>{item.icon}</span>
+                      style={{ background:active ? 'var(--bg)' : 'transparent' }}>
+                      <span style={{ color:active ? 'var(--accent)' : 'var(--muted)', display:'flex' }}>{item.icon}</span>
                       {item.label}
                     </Link>
                   )
@@ -254,9 +267,9 @@ function SiteNav({ pathname, groups, mobileItems, onLogout }: {
           </button>
         </div>
       </header>
-      <nav className="site-bottom-nav" style={{
+      <nav className="site-bottom-nav" aria-label="Mobile navigation" style={{
         position: 'fixed', bottom: 0, left: 0, right: 0,
-        background: '#1A1A2E', borderTop: '1px solid #2A2A3E',
+        background: 'var(--navy)', borderTop: '1px solid var(--navy-soft)',
         padding: '10px 8px', justifyContent: 'space-around',
         alignItems: 'center', zIndex: 100,
         boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
@@ -265,6 +278,7 @@ function SiteNav({ pathname, groups, mobileItems, onLogout }: {
           const active = item.active(pathname)
           return (
             <Link key={`${item.href}-${item.label}`} href={item.href}
+              aria-current={active ? 'page' : undefined}
               style={{
                 flex: 1, textAlign: 'center', textDecoration: 'none',
                 color: active ? '#FFE7DA' : '#7070A0',

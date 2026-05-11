@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { getCurrentMember } from '@/lib/auth-helpers'
 import { AuthedLayout } from '@/lib/AuthedLayout'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { Alert, PageHeader, PageShell } from '@/components/ui'
 
 export default async function ManagePage() {
   const me = await getCurrentMember()
@@ -11,9 +12,11 @@ export default async function ManagePage() {
   if (me.role !== 'admin') {
     return (
       <AuthedLayout>
-        <div style={{ padding: 40, fontFamily: "'DM Sans', sans-serif" }}>
-          Admins only.
-        </div>
+        <PageShell size="narrow">
+          <Alert tone="warning" title="Admins only">
+            You need an admin account to manage family-wide settings.
+          </Alert>
+        </PageShell>
       </AuthedLayout>
     )
   }
@@ -98,39 +101,38 @@ export default async function ManagePage() {
 
   return (
     <AuthedLayout>
-      <div style={{ maxWidth: 900, margin: '40px auto', padding: 24, fontFamily: "'DM Sans', sans-serif" }}>
-        <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 28, marginBottom: 6, color: '#1A1A2E' }}>
-          Manage
-        </h1>
-        <p style={{ fontSize: 14, color: '#8B8599', marginBottom: 28 }}>
-          Family-wide settings. Anything you change here affects every dashboard.
-        </p>
+      <PageShell>
+        <PageHeader
+          title="Manage"
+          description="Family-wide settings. Anything you change here affects every dashboard."
+        />
 
         <div style={{ display: 'grid', gap: 12, marginBottom: 28 }}>
           {tiles.map(t => (
             <Link key={t.href} href={t.href}
               style={{
-                display: 'block', padding: 20, background: '#fff',
-                border: '1px solid #E2DDD6', borderRadius: 12,
+                display: 'block', padding: 20, background: 'var(--surface)',
+                border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
                 textDecoration: 'none', color: 'inherit',
                 borderLeft: `4px solid ${t.color}`,
+                boxShadow: 'var(--shadow-card)',
               }}>
               <div style={{ display: 'flex', alignItems: 'baseline',
                             justifyContent: 'space-between', marginBottom: 4, gap: 12 }}>
                 <span style={{ fontSize: 18, fontWeight: 600 }}>{t.label}</span>
-                <span style={{ fontSize: 13, color: '#8B8599', textAlign: 'right' }}>{t.blurb}</span>
+                <span style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'right' }}>{t.blurb}</span>
               </div>
-              <p style={{ fontSize: 13, color: '#4A4A5A', margin: 0, lineHeight: 1.5 }}>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
                 {t.desc}
               </p>
             </Link>
           ))}
         </div>
 
-        <div style={{ padding: 18, background: '#FFFBEB',
-                      border: '1px solid #FDE68A', borderRadius: 12,
+        <div style={{ padding: 18, background: 'var(--warning-soft)',
+                      border: '1px solid var(--warning-border)', borderRadius: 'var(--radius-lg)',
                       color: '#92400E', lineHeight: 1.5 }}>
-          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>
+          <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
             Sunday Planning
           </div>
           <p style={{ fontSize: 13, color: '#92400E', margin: '0 0 14px' }}>
@@ -139,14 +141,14 @@ export default async function ManagePage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
             {sundayTiles.map(t => (
               <Link key={t.href} href={t.href}
-                style={{ display: 'block', padding: 14, background: '#fff', border: '1px solid #FDE68A', borderRadius: 10, textDecoration: 'none', color: 'inherit' }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E', marginBottom: 3 }}>{t.label}</div>
+                style={{ display: 'block', padding: 14, background: 'var(--surface)', border: '1px solid var(--warning-border)', borderRadius: 10, textDecoration: 'none', color: 'inherit' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 3 }}>{t.label}</div>
                 <div style={{ fontSize: 12, color: '#92400E' }}>{t.desc}</div>
               </Link>
             ))}
           </div>
         </div>
-      </div>
+      </PageShell>
     </AuthedLayout>
   )
 }

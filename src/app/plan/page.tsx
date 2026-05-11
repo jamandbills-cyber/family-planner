@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { RefreshCw, Car, CheckCircle, Loader2 } from 'lucide-react'
+import { RefreshCw, Car, CheckCircle } from 'lucide-react'
+import { Alert, Button, EmptyState, LoadingState, PageShell } from '@/components/ui'
 
 const WEEK = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
 
@@ -44,52 +45,39 @@ export default function LivePlanPage() {
   const todayIdx = new Date().getDay()
 
   if (loading) return (
-    <div style={{ fontFamily:"'DM Sans',sans-serif", display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'#F7F4EF' }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Playfair+Display:wght@700&display=swap'); *{box-sizing:border-box;margin:0;padding:0} @keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <div style={{ display:'flex', alignItems:'center', gap:10, fontSize:15, color:'#8B8599' }}>
-        <Loader2 size={18} style={{ animation:'spin 1s linear infinite', color:'#C4522A' }} /> Loading weekly plan…
-      </div>
-    </div>
+    <LoadingState label="Loading weekly plan..." />
   )
 
   if (error === 'no_plan') return (
-    <div style={{ fontFamily:"'DM Sans',sans-serif", display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'#F7F4EF', padding:24 }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Playfair+Display:wght@700&display=swap'); *{box-sizing:border-box;margin:0;padding:0}`}</style>
-      <div style={{ textAlign:'center', maxWidth:360 }}>
-        <div style={{ fontSize:48, marginBottom:16 }}>📅</div>
-        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:24, fontWeight:700, color:'#1A1A2E', marginBottom:10 }}>No plan yet this week</div>
-        <p style={{ fontSize:14, color:'#8B8599', lineHeight:1.6 }}>The weekly plan will appear here after the family meeting on Sunday.</p>
-      </div>
-    </div>
+    <PageShell size="narrow">
+      <EmptyState title="No plan yet this week">
+        The weekly plan will appear here after the family meeting on Sunday.
+      </EmptyState>
+    </PageShell>
   )
 
   if ((error === 'load_failed') && !plan) return (
-    <div style={{ fontFamily:"'DM Sans',sans-serif", display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'#F7F4EF', padding:24 }}>
-      <style>{`*{box-sizing:border-box;margin:0;padding:0}`}</style>
-      <div style={{ textAlign:'center', maxWidth:360 }}>
-        <div style={{ fontSize:40, marginBottom:16 }}>⚠️</div>
-        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:700, color:'#1A1A2E', marginBottom:10 }}>Couldn't load plan</div>
-        <button onClick={() => fetchPlan()} style={{ background:'#C4522A', color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontSize:14, fontWeight:600, cursor:'pointer' }}>Try again</button>
-      </div>
-    </div>
+    <PageShell size="narrow">
+      <EmptyState
+        title="Couldn't load plan"
+        action={<Button onClick={() => fetchPlan()}>Try again</Button>}
+      />
+    </PageShell>
   )
 
   if (!plan) return (
-    <div style={{ fontFamily:"'DM Sans',sans-serif", display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'#F7F4EF', padding:24 }}>
-      <style>{`*{box-sizing:border-box;margin:0;padding:0}`}</style>
-      <div style={{ textAlign:'center', maxWidth:360 }}>
-        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:700, color:'#1A1A2E', marginBottom:10 }}>Plan unavailable</div>
-        <button onClick={() => fetchPlan()} style={{ background:'#C4522A', color:'#fff', border:'none', borderRadius:8, padding:'10px 20px', fontSize:14, fontWeight:600, cursor:'pointer' }}>Try again</button>
-      </div>
-    </div>
+    <PageShell size="narrow">
+      <EmptyState
+        title="Plan unavailable"
+        action={<Button onClick={() => fetchPlan()}>Try again</Button>}
+      />
+    </PageShell>
   )
 
   return (
     <div style={{ fontFamily:"'DM Sans',sans-serif", background:'#F7F4EF', minHeight:'100vh' }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Playfair+Display:wght@700&display=swap');
-        *{box-sizing:border-box;margin:0;padding:0}
-        .card{background:#fff;border-radius:12px;border:1px solid #E8E3DB;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
+        .card{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow-card)}
         @keyframes spin{to{transform:rotate(360deg)}}
       `}</style>
 
@@ -104,8 +92,8 @@ export default function LivePlanPage() {
               {lastCheck && ` · Checked ${lastCheck}`}
             </div>
           </div>
-          <button onClick={() => fetchPlan(true)} disabled={refreshing}
-            style={{ background:'rgba(255,255,255,0.08)', border:'1.5px solid rgba(255,255,255,0.15)', color:'rgba(255,255,255,0.7)', borderRadius:8, padding:'8px 14px', fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:6, fontFamily:"'DM Sans',sans-serif" }}>
+          <button type="button" onClick={() => fetchPlan(true)} disabled={refreshing}
+            style={{ background:'rgba(255,255,255,0.08)', border:'1.5px solid rgba(255,255,255,0.15)', color:'rgba(255,255,255,0.7)', borderRadius:8, padding:'8px 14px', fontSize:13, cursor:refreshing ? 'not-allowed' : 'pointer', display:'flex', alignItems:'center', gap:6, fontFamily:"'DM Sans',sans-serif" }}>
             <RefreshCw size={13} style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
             Refresh
           </button>
@@ -114,9 +102,9 @@ export default function LivePlanPage() {
 
       <div style={{ maxWidth:600, margin:'0 auto', padding:'20px 16px 48px', display:'flex', flexDirection:'column', gap:14 }}>
         {error === 'load_failed' && (
-          <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', color:'#DC2626', borderRadius:10, padding:'10px 12px', fontSize:13, lineHeight:1.4 }}>
+          <Alert tone="danger">
             Could not refresh the plan. Showing the last loaded version.
-          </div>
+          </Alert>
         )}
 
         {/* Schedule — one card per day that has content */}
