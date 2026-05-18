@@ -1,5 +1,6 @@
 import { google } from 'googleapis'
 import { startOfWeek, endOfWeek, isValid } from 'date-fns'
+import { getDaySpanSlices, julianDay, parseLocalParts } from '@/lib/calendar-day-span'
 import type { CalendarEvent, GoogleCalendarEvent } from './types'
 
 // ─── Week starts on Sunday (0), ends on Saturday ─────────────
@@ -7,23 +8,6 @@ export function getWeekRange(referenceDate: Date = new Date()) {
   const weekStart = startOfWeek(referenceDate, { weekStartsOn: 0 }) // Sunday
   const weekEnd   = endOfWeek(referenceDate,   { weekStartsOn: 0 }) // Saturday
   return { weekStart, weekEnd }
-}
-
-// ─── Parse time parts directly from ISO string ────────────────
-// This avoids UTC conversion issues on the server.
-// Google Calendar stores times with their local offset,
-// e.g. "2026-03-30T08:00:00-06:00" — we read "8:00" directly.
-function parseLocalParts(isoString: string) {
-  const tIdx = isoString.indexOf('T')
-  if (tIdx === -1) {
-    // All-day: "2026-03-30"
-    const [year, month, day] = isoString.split('-').map(Number)
-    return { year, month: month - 1, day, hours: 0, minutes: 0, allDay: true }
-  }
-  const [year, month, day] = isoString.substring(0, tIdx).split('-').map(Number)
-  const hours   = parseInt(isoString.substring(tIdx + 1, tIdx + 3), 10)
-  const minutes = parseInt(isoString.substring(tIdx + 4, tIdx + 6), 10)
-  return { year, month: month - 1, day, hours, minutes, allDay: false }
 }
 
 // ─── Format hours/minutes to "8:00 AM" style ─────────────────
@@ -58,61 +42,43 @@ export async function fetchGoogleCalendarEvents(
   return (response.data.items ?? []) as GoogleCalendarEvent[]
 }
 
-// ─── Convert a Google Calendar event to our CalendarEvent ────
+function sliceTimeLabel(startMinutes: number, endMinutes: number, allDay: boolean): string {
+  if (allDay) return 'All Day'
+  const start = formatLocalTime(Math.floor(startMinutes / 60), startMinutes % 60)
+  const end = formatLocalTime(Math.floor(endMinutes / 60), endMinutes % 60)
+  return `${start}–${end}`
+}
+
+// ─── Convert a Google Calendar event to our CalendarEvent(s) ─
 export function transformGoogleEvent(
   raw: GoogleCalendarEvent,
   weekStart: Date
-): CalendarEvent | null {
+): CalendarEvent[] {
   const startStr = raw.start?.dateTime ?? raw.start?.date
   const endStr   = raw.end?.dateTime   ?? raw.end?.date
-  if (!startStr) return null
+  if (!startStr || !raw.id) return []
 
   const startParts = parseLocalParts(startStr)
+  const endParts   = endStr ? parseLocalParts(endStr) : startParts
 
-  // Build a local midnight date for day comparison
-  // weekStart is UTC midnight of Sunday — extract just its date parts
   const wsYear  = weekStart.getUTCFullYear()
   const wsMonth = weekStart.getUTCMonth()
   const wsDay   = weekStart.getUTCDate()
+  const wsJulian = julianDay(wsYear, wsMonth, wsDay)
 
-  // Build comparable numbers: days since some epoch using local date parts
-  const toJulian = (y: number, m: number, d: number) =>
-    Math.floor(y * 365.25) + Math.floor((m + 1) * 30.6) + d
+  const slices = getDaySpanSlices(startParts, endParts, wsJulian)
+  if (slices.length === 0) return []
 
-  const startJulian = toJulian(startParts.year, startParts.month, startParts.day)
-  const wsJulian    = toJulian(wsYear, wsMonth, wsDay)
-  const dayIdx      = startJulian - wsJulian
+  const spanDays = slices.length > 1
 
-  if (dayIdx < 0 || dayIdx > 6) return null
-
-  // sortMin for chronological ordering (0 = all day → top)
-  const sortMin = startParts.allDay ? 0 : startParts.hours * 60 + startParts.minutes
-
-  // Human-readable time string
-  let time = 'All Day'
-  if (!startParts.allDay) {
-    const startStr2 = formatLocalTime(startParts.hours, startParts.minutes)
-    if (endStr) {
-      const endParts = parseLocalParts(endStr)
-      if (!endParts.allDay) {
-        const endStr2 = formatLocalTime(endParts.hours, endParts.minutes)
-        time = `${startStr2}–${endStr2}`
-      } else {
-        time = startStr2
-      }
-    } else {
-      time = startStr2
-    }
-  }
-
-  return {
-    id: raw.id,
+  return slices.map(slice => ({
+    id: spanDays ? `${raw.id}#${slice.dayIdx}` : raw.id!,
     title: raw.summary ?? 'Untitled event',
-    dayIdx,
-    time,
-    sortMin,
+    dayIdx: slice.dayIdx,
+    time: sliceTimeLabel(slice.startMinutes, slice.endMinutes, slice.allDay),
+    sortMin: slice.allDay ? 0 : slice.startMinutes,
     location: raw.location,
-    allDay: startParts.allDay,
+    allDay: slice.allDay,
     involvedIds: [],
     transportStatus: 'unset',
     transportType: 'ride',
@@ -121,7 +87,7 @@ export function transformGoogleEvent(
     pickupDriverId: null,
     standingRuleId: null,
     carpoolNote: '',
-  }
+  }))
 }
 
 // ─── Main export: fetch + transform in one call ───────────────
@@ -137,8 +103,7 @@ export async function getWeekCalendarEvents(
   )
 
   const events = rawEvents
-    .map(raw => transformGoogleEvent(raw, weekStart))
-    .filter((e): e is CalendarEvent => e !== null)
+    .flatMap(raw => transformGoogleEvent(raw, weekStart))
     .sort((a, b) => a.dayIdx !== b.dayIdx
       ? a.dayIdx - b.dayIdx
       : a.sortMin - b.sortMin

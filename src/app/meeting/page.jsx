@@ -232,6 +232,7 @@ export default function MeetingPage() {
       const dayEvents = events
         .filter(e => e.dayIdx === dayIdx && e.transportStatus !== 'unset')
         .map(e => ({
+          sourceId: e.id,
           title:    e.title,
           time:     e.time,
           location: e.location ?? '',
@@ -354,7 +355,7 @@ export default function MeetingPage() {
           {[
             { icon:'✉', label: confirmResult?.emailSent ? `Email sent to ${confirmResult?.emailRecipients ?? members.filter(m=>m.email).length} family members` : `Email not sent${confirmResult?.emailError ? `: ${confirmResult.emailError}` : ''}`, ok: confirmResult?.emailSent },
             { icon:'📱', label:`Texts sent to ${confirmResult?.textsSent ?? 0} family members`, ok: (confirmResult?.textsSent ?? 0) > 0 },
-            { icon:'📅', label:`${confirmResult?.calendarCreated ?? 0} calendar events created · ${confirmResult?.calendarUpdated ?? 0} updated`, ok: true },
+            { icon:'📅', label:`${confirmResult?.calendarCreated ?? 0} created · ${confirmResult?.calendarUpdated ?? 0} updated${confirmResult?.calendarDeduped ? ` · ${confirmResult.calendarDeduped} duplicates removed` : ''}`, ok: true },
           ].map((item,i) => (
             <div key={i} style={{ padding:'12px 16px', background:item.ok === false ? '#FEF2F2' : '#fff', borderRadius:10, border:`1px solid ${item.ok === false ? '#FECACA' : '#E8E3DB'}`, display:'flex', alignItems:'center', gap:10, fontSize:14, color:item.ok === false ? '#DC2626' : '#1A1A2E' }}>
               <span style={{ fontSize:18 }}>{item.icon}</span> {item.label}

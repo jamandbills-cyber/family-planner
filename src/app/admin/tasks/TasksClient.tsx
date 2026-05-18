@@ -201,7 +201,8 @@ export default function TasksClient() {
               label="Due date"
               type="date"
               value={due_date}
-                onChange={e => setDueDate(e.target.value)}
+              onChange={e => setDueDate(e.target.value)}
+            />
           </div>
           <Button onClick={create} disabled={creating || !owner_id || !text.trim()}>
             {creating

@@ -7,6 +7,18 @@ import { getAppUrl } from '@/lib/app-url'
 import { requireAdminMember } from '@/lib/auth-helpers'
 import { getPlanningMembers, publishPlanningPlan } from '@/lib/planning-data'
 import { google } from 'googleapis'
+import {
+  dedupeManagedEvents,
+  findLegacySchoolMatches,
+  googleEventIdFromSource,
+  HOUSEHOLD_TZ,
+  inferSchoolSourceId,
+  isSchoolPlanEvent,
+  listDayEvents,
+  listEventsByPlannerId,
+  makeFamilyPlannerId,
+  managedEventBody,
+} from '@/lib/google-calendar-managed'
 
 export async function POST(req: NextRequest) {
   const auth = await requireAdminMember()
@@ -68,6 +80,7 @@ export async function POST(req: NextRequest) {
     const calResult = await updateCalendarEvents(accessToken, plan, weekStart)
     results.calendarUpdated  = calResult.updated
     results.calendarCreated  = calResult.created
+    results.calendarDeduped  = calResult.deduped
 
     return NextResponse.json({ success: true, results })
   } catch (err) {
@@ -81,7 +94,7 @@ async function updateCalendarEvents(
   accessToken: string,
   plan: any,
   weekStart: string
-): Promise<{ updated: number; created: number }> {
+): Promise<{ updated: number; created: number; deduped: number }> {
   const auth = new google.auth.OAuth2()
   auth.setCredentials({ access_token: accessToken })
   const calendar  = google.calendar({ version: 'v3', auth })
@@ -91,6 +104,16 @@ async function updateCalendarEvents(
   const wsDate = new Date(weekStart + 'T00:00:00')
   let updated  = 0
   let created  = 0
+  let deduped  = 0
+
+  const dayEventsCache = new Map<string, Awaited<ReturnType<typeof listDayEvents>>>()
+
+  async function getDayEvents(dateStr: string) {
+    if (!dayEventsCache.has(dateStr)) {
+      dayEventsCache.set(dateStr, await listDayEvents(calendar, calendarId, dateStr))
+    }
+    return dayEventsCache.get(dateStr)!
+  }
 
   for (const day of (plan.schedule ?? [])) {
     const dayIdx = DAYS.indexOf(day.day)
@@ -103,39 +126,51 @@ async function updateCalendarEvents(
     for (const evt of (day.events ?? [])) {
       if (!evt.title) continue
 
-      const isSchoolDrop   = evt.title.toLowerCase().includes('drop-off') || evt.title.toLowerCase().includes('drop')
-      const isSchoolPickup = evt.title.toLowerCase().includes('pick-up')  || evt.title.toLowerCase().includes('pickup')
-      const isSchool       = isSchoolDrop || isSchoolPickup
-
-      if (isSchool) {
-        // ── Upsert school events in Google Calendar ─────────────
+      if (isSchoolPlanEvent(evt.sourceId, evt.title)) {
         if (!evt.time) continue
 
         const times = parseTimeStr(evt.time, dateStr)
         if (!times) continue
 
-        try {
-          const listRes = await calendar.events.list({
-            calendarId,
-            timeMin: `${dateStr}T00:00:00-06:00`,
-            timeMax: `${dateStr}T23:59:59-06:00`,
-            q:       evt.title,
-            singleEvents: true,
-            maxResults: 10,
-          })
-          const existing = listRes.data.items?.find(e => {
-            const calTitle = (e.summary ?? '').toLowerCase()
-            const evtTitle = evt.title.toLowerCase()
-            return calTitle.includes(evtTitle) || evtTitle.includes(calTitle)
-          })
+        const sourceId =
+          evt.sourceId ??
+          inferSchoolSourceId(evt.title, dayIdx) ??
+          `school_slot_${dayIdx}_${evt.title.toLowerCase().replace(/\s+/g, '_').slice(0, 40)}`
+        const plannerId = makeFamilyPlannerId(weekStart, sourceId)
 
-          const requestBody = {
-            summary:     evt.title,
-            description: evt.driver ? `🚗 Driver: ${evt.driver}` : 'Driver TBD',
-            start:       { dateTime: times.start, timeZone: 'America/Denver' },
-            end:         { dateTime: times.end,   timeZone: 'America/Denver' },
-            colorId:     '7', // blue/peacock for school
+        try {
+          const tagged = await listEventsByPlannerId(calendar, calendarId, plannerId)
+          const { kept: taggedKeep, removed: taggedRemoved } = await dedupeManagedEvents(
+            calendar,
+            calendarId,
+            tagged,
+          )
+          deduped += taggedRemoved
+
+          let existing = taggedKeep
+          if (!existing?.id) {
+            const dayEvents = await getDayEvents(dateStr)
+            const legacyMatches = findLegacySchoolMatches(dayEvents, evt.title, plannerId)
+            const { kept: legacyKeep, removed: legacyRemoved } = await dedupeManagedEvents(
+              calendar,
+              calendarId,
+              legacyMatches,
+            )
+            deduped += legacyRemoved
+            existing = legacyKeep ?? undefined
           }
+
+          const description = evt.driver ? `🚗 Driver: ${evt.driver}` : 'Driver TBD'
+          const start = { dateTime: times.start, timeZone: HOUSEHOLD_TZ }
+          const end = { dateTime: times.end, timeZone: HOUSEHOLD_TZ }
+          const requestBody = managedEventBody(
+            plannerId,
+            evt.title,
+            description,
+            start,
+            end,
+            '7',
+          )
 
           if (existing?.id) {
             await calendar.events.patch({
@@ -156,41 +191,41 @@ async function updateCalendarEvents(
         }
 
       } else if (evt.driver) {
-        // ── Update existing event with driver info ───────────────
         try {
-          const listRes = await calendar.events.list({
-            calendarId,
-            timeMin: `${dateStr}T00:00:00-06:00`,
-            timeMax: `${dateStr}T23:59:59-06:00`,
-            q:       evt.title,
-            singleEvents: true,
-            maxResults: 10,
-          })
+          const googleId = googleEventIdFromSource(evt.sourceId)
+          let existingId = googleId
 
-          const existing = listRes.data.items?.find(e => {
-            const calTitle = (e.summary ?? '').toLowerCase()
+          if (!existingId) {
+            const dayEvents = await getDayEvents(dateStr)
             const evtTitle = evt.title.toLowerCase()
-            return calTitle.includes(evtTitle) || evtTitle.includes(calTitle)
-          })
-
-          if (existing?.id) {
-            const existingDesc = existing.description ?? ''
-            // Don't double-add driver info
-            const driverLine   = `🚗 Driver: ${evt.driver}`
-            const newDesc      = existingDesc.includes('🚗 Driver')
-              ? existingDesc.replace(/🚗 Driver:.*(\n|$)/, `${driverLine}\n`)
-              : `${driverLine}\n\n${existingDesc}`.trim()
-
-            await calendar.events.patch({
-              calendarId,
-              eventId: existing.id,
-              requestBody: {
-                description: newDesc,
-                colorId:     '11', // tomato red = driver assigned
-              },
+            const match = dayEvents.find(e => {
+              const calTitle = (e.summary ?? '').toLowerCase()
+              return calTitle.includes(evtTitle) || evtTitle.includes(calTitle)
             })
-            updated++
+            existingId = match?.id ?? null
           }
+
+          if (!existingId) continue
+
+          const existing = await calendar.events.get({
+            calendarId,
+            eventId: existingId,
+          })
+          const existingDesc = existing.data.description ?? ''
+          const driverLine   = `🚗 Driver: ${evt.driver}`
+          const newDesc      = existingDesc.includes('🚗 Driver')
+            ? existingDesc.replace(/🚗 Driver:.*(\n|$)/, `${driverLine}\n`)
+            : `${driverLine}\n\n${existingDesc}`.trim()
+
+          await calendar.events.patch({
+            calendarId,
+            eventId: existingId,
+            requestBody: {
+              description: newDesc,
+              colorId:     '11',
+            },
+          })
+          updated++
         } catch (err) {
           console.error('Calendar update error:', err)
         }
@@ -198,7 +233,7 @@ async function updateCalendarEvents(
     }
   }
 
-  return { updated, created }
+  return { updated, created, deduped }
 }
 
 // ─── Parse time string into start/end ISO datetimes ──────────

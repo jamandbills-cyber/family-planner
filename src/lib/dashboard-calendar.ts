@@ -3,6 +3,7 @@ import 'server-only'
 import { google } from 'googleapis'
 import { addDays, addWeeks, format, startOfWeek } from 'date-fns'
 import type { DashboardCalendarEvent, WeekRange } from '@/lib/types/calendar'
+import { getDaySpanSlices, julianDay, parseLocalParts } from '@/lib/calendar-day-span'
 import { getSundayPlan } from '@/lib/sunday-plan'
 
 const HOUSEHOLD_TIME_ZONE = process.env.HOUSEHOLD_TIME_ZONE ?? 'America/Denver'
@@ -28,22 +29,6 @@ function getGoogleCalendarAuth() {
     credentials,
     scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
   })
-}
-
-function parseLocalParts(isoString: string) {
-  const tIdx = isoString.indexOf('T')
-  if (tIdx === -1) {
-    const [year, month, day] = isoString.split('-').map(Number)
-    return { year, month: month - 1, day, hours: 0, minutes: 0, allDay: true }
-  }
-  const [year, month, day] = isoString.substring(0, tIdx).split('-').map(Number)
-  const hours   = parseInt(isoString.substring(tIdx + 1, tIdx + 3), 10)
-  const minutes = parseInt(isoString.substring(tIdx + 4, tIdx + 6), 10)
-  return { year, month: month - 1, day, hours, minutes, allDay: false }
-}
-
-function julianDay(y: number, m: number, d: number) {
-  return Math.floor(y * 365.25) + Math.floor((m + 1) * 30.6) + d
 }
 
 function parseTimeStr(timeStr: string): number {
@@ -183,63 +168,62 @@ export async function fetchWeekCalendar(weekOffset: number = 0): Promise<WeekRan
   )
 
   const calendarEvents: DashboardCalendarEvent[] = (response.data.items ?? [])
-    .map(raw => {
+    .flatMap(raw => {
       const startStr = raw.start?.dateTime ?? raw.start?.date
       const endStr   = raw.end?.dateTime   ?? raw.end?.date
-      if (!startStr || !raw.id) return null
-      if (isSchoolish(raw.summary ?? '', raw.id)) return null
+      if (!startStr || !raw.id) return []
+      if (isSchoolish(raw.summary ?? '', raw.id)) return []
 
       const startParts = parseLocalParts(startStr)
       const endParts   = endStr ? parseLocalParts(endStr) : startParts
+      const slices = getDaySpanSlices(startParts, endParts, displayStartJulian)
+      if (slices.length === 0) return []
 
-      const startJulian = julianDay(startParts.year, startParts.month, startParts.day)
-      const dayIdx = startJulian - displayStartJulian
-      if (dayIdx < 0 || dayIdx > 6) return null
-
-      const startMinutes = startParts.allDay ? 0 : startParts.hours * 60 + startParts.minutes
-      const sameDay = startParts.year === endParts.year &&
-                      startParts.month === endParts.month &&
-                      startParts.day === endParts.day
-      const endMinutes = startParts.allDay
-        ? 24 * 60
-        : sameDay ? endParts.hours * 60 + endParts.minutes : 24 * 60
-
-      const evt: DashboardCalendarEvent = {
-        id: raw.id,
-        title: raw.summary ?? '(untitled)',
-        startISO: startStr,
-        endISO: endStr ?? startStr,
-        allDay: startParts.allDay,
-        location: raw.location ?? undefined,
-        description: raw.description ?? undefined,
-        dayIdx,
-        startMinutes,
-        endMinutes,
-        involvedIds: [],
-        driverId: null,
-        dropoffDriverId: null,
-        pickupDriverId: null,
-        transportStatus: 'unset',
-        transportType: 'ride',
-        isSchoolEvent: false,
-      }
-
+      const spanDays = slices.length > 1
       const saved = savedEvents.find((s: any) => s.id === raw.id)
-                ?? savedEvents.find((s: any) =>
-                     s.title === raw.summary && s.displayDayIdx === dayIdx)
-      if (saved) {
-        evt.involvedIds = saved.involvedIds ?? []
-        evt.driverId = saved.driverId ?? null
-        evt.dropoffDriverId = saved.dropoffDriverId ?? null
-        evt.pickupDriverId = saved.pickupDriverId ?? null
-        evt.transportStatus = saved.transportStatus ?? 'unset'
-        evt.transportType = saved.transportType ?? 'ride'
-        evt.carpoolNote = saved.carpoolNote ?? ''
-      }
+        ?? savedEvents.find((s: any) => s.title === raw.summary)
 
-      return evt
+      return slices.map(slice => {
+        const evt: DashboardCalendarEvent = {
+          id: spanDays ? `${raw.id}#${slice.dayIdx}` : raw.id!,
+          title: raw.summary ?? '(untitled)',
+          startISO: slice.allDay
+            ? `${slice.dateStr}T00:00:00`
+            : startStr,
+          endISO: slice.allDay
+            ? `${slice.dateStr}T23:59:59`
+            : (endStr ?? startStr),
+          allDay: slice.allDay,
+          location: raw.location ?? undefined,
+          description: raw.description ?? undefined,
+          dayIdx: slice.dayIdx,
+          startMinutes: slice.startMinutes,
+          endMinutes: slice.endMinutes,
+          involvedIds: [],
+          driverId: null,
+          dropoffDriverId: null,
+          pickupDriverId: null,
+          transportStatus: 'unset',
+          transportType: 'ride',
+          isSchoolEvent: false,
+        }
+
+        if (
+          saved &&
+          (saved.displayDayIdx === undefined || saved.displayDayIdx === slice.dayIdx)
+        ) {
+          evt.involvedIds = saved.involvedIds ?? []
+          evt.driverId = saved.driverId ?? null
+          evt.dropoffDriverId = saved.dropoffDriverId ?? null
+          evt.pickupDriverId = saved.pickupDriverId ?? null
+          evt.transportStatus = saved.transportStatus ?? 'unset'
+          evt.transportType = saved.transportType ?? 'ride'
+          evt.carpoolNote = saved.carpoolNote ?? ''
+        }
+
+        return evt
+      })
     })
-    .filter((e): e is DashboardCalendarEvent => e !== null)
 
   const schoolEvents: DashboardCalendarEvent[] = savedEvents
     .filter((s: any) => typeof s.id === 'string' && s.id.startsWith('school_'))

@@ -611,6 +611,7 @@ function MidWeekUpdateButton({ weekStartKey, events, dinner, agenda, weekLabel, 
         const dayEvents = events
           .filter((e: any) => e.dayIdx === dayIdx && e.transportStatus !== 'unset')
           .map((e: any) => ({
+            sourceId: e.id,
             title: e.title, time: e.time, location: e.location ?? '',
             driver: driverSummary(e),
             transportNote: e.transportStatus === 'no_transport' ? 'No transport needed' : '',
@@ -769,7 +770,9 @@ export default function AdminSetupClient() {
       // Single setEvents call — everything at once
       setEvents(() => {
         const applySavedEventState = (evt: CalendarEvent) => {
+          const baseId = evt.id?.split('#')[0]
           const saved = savedEvts.find((s: any) => s.id === evt.id) ??
+                        savedEvts.find((s: any) => s.id === baseId) ??
                         savedEvts.find((s: any) => s.title === evt.title && s.dayIdx === evt.dayIdx)
 
           if (saved && (
