@@ -48,7 +48,7 @@ export async function listEventsByPlannerId(
 ): Promise<calendar_v3.Schema$Event[]> {
   const res = await calendar.events.list({
     calendarId,
-    privateExtendedProperty: `${FAMILY_PLANNER_ID_PROP}=${plannerId}`,
+    privateExtendedProperty: [`${FAMILY_PLANNER_ID_PROP}=${plannerId}`],
     singleEvents: true,
     maxResults: 25,
   })
