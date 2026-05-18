@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Upload, Trash2, ImageIcon, Loader2 } from 'lucide-react'
+import { Alert, Button, Card, EmptyState, IconButton, LoadingState, PageHeader, PageShell } from '@/components/ui'
 
 type Photo = { name: string; url: string; size: number; uploadedAt: string | null }
 
@@ -66,27 +67,14 @@ export default function PhotosClient() {
   }
 
   return (
-    <div style={{
-      fontFamily: "'DM Sans', sans-serif",
-      background: '#F7F4EF',
-      minHeight: '100vh',
-      padding: '24px',
-    }}>
-      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-        <div style={{ marginBottom: 24 }}>
-          <a href="/manage" style={{ fontSize: 13, color: '#8B8599', textDecoration: 'none' }}>← Back to manage</a>
-          <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 28, fontWeight: 700, color: '#1A1A2E', margin: '4px 0 6px' }}>
-            Family Photos
-          </h1>
-          <p style={{ fontSize: 14, color: '#8B8599', margin: 0 }}>
-            Photos rotate on the kitchen display. Mixed orientations are letterboxed automatically.
-          </p>
-        </div>
+    <PageShell size="wide">
+      <PageHeader
+        eyebrow={<a href="/manage" style={{ color: 'inherit', textDecoration: 'none' }}>Back to manage</a>}
+        title="Family Photos"
+        description="Photos rotate on the kitchen display. Mixed orientations are letterboxed automatically."
+      />
 
-        <div style={{
-          background: '#fff', border: '1px solid #E8E3DB', borderRadius: 12,
-          padding: 20, marginBottom: 20,
-        }}>
+      <Card style={{ marginBottom: 20 }}>
           <input
             ref={fileInput}
             type="file"
@@ -95,39 +83,27 @@ export default function PhotosClient() {
             style={{ display: 'none' }}
             onChange={e => e.target.files && upload(e.target.files)}
           />
-          <button
+          <Button
             onClick={() => fileInput.current?.click()}
             disabled={uploading}
-            style={{
-              background: '#C4522A', color: '#fff', border: 'none',
-              borderRadius: 8, padding: '12px 20px', fontSize: 14, fontWeight: 600,
-              cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8,
-              fontFamily: "'DM Sans', sans-serif",
-              opacity: uploading ? 0.6 : 1,
-            }}>
+          >
             {uploading
-              ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Uploading…</>
+              ? <><Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> Uploading...</>
               : <><Upload size={15} /> Upload Photos</>}
-          </button>
-          {error && (
-            <div style={{ marginTop: 10, fontSize: 13, color: '#DC2626' }}>⚠ {error}</div>
-          )}
-        </div>
+          </Button>
+          {error && <Alert tone="danger" style={{ marginTop: 12 }}>{error}</Alert>}
+      </Card>
 
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#8B8599' }}>
-            <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />
+      {loading ? (
+        <LoadingState label="Loading photos..." />
+      ) : photos.length === 0 ? (
+        <EmptyState title="No photos yet">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <ImageIcon size={18} /> Upload some above and they will rotate on the kitchen display.
           </div>
-        ) : photos.length === 0 ? (
-          <div style={{
-            background: '#fff', border: '1px dashed #DDD8CF', borderRadius: 12,
-            padding: 40, textAlign: 'center',
-          }}>
-            <ImageIcon size={36} style={{ color: '#C4B8A8', margin: '0 auto 12px' }} />
-            <div style={{ fontSize: 14, color: '#8B8599' }}>No photos yet. Upload some above.</div>
-          </div>
-        ) : (
-          <div style={{
+        </EmptyState>
+      ) : (
+        <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
             gap: 12,
@@ -135,17 +111,17 @@ export default function PhotosClient() {
             {photos.map(p => (
               <div key={p.name} style={{
                 position: 'relative',
-                background: '#fff', border: '1px solid #E8E3DB',
-                borderRadius: 10, overflow: 'hidden',
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-lg)', overflow: 'hidden',
                 aspectRatio: '4 / 3',
               }}>
                 <img src={p.url} alt={p.name} style={{
                   width: '100%', height: '100%',
                   objectFit: 'cover', display: 'block',
                 }} />
-                <button
+                <IconButton
+                  label={`Delete ${p.name}`}
                   onClick={() => remove(p.name)}
-                  title="Delete"
                   style={{
                     position: 'absolute', top: 6, right: 6,
                     background: 'rgba(0,0,0,0.6)', border: 'none',
@@ -153,12 +129,11 @@ export default function PhotosClient() {
                     color: '#fff', display: 'flex', alignItems: 'center',
                   }}>
                   <Trash2 size={13} />
-                </button>
+                </IconButton>
               </div>
             ))}
-          </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </PageShell>
   )
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Trash2, Loader2 } from 'lucide-react'
+import { Alert, Button, Card, EmptyState, Field, IconButton, LoadingState, PageHeader, PageShell, SelectField, StatusPill } from '@/components/ui'
 
 type Member = { id: string; display_name: string; color: string | null }
 type Idea = {
@@ -103,132 +104,80 @@ export default function IdeasClient() {
   }, [ideas, members])
 
   return (
-    <div style={{
-      fontFamily: "'DM Sans', sans-serif",
-      background: '#F7F4EF', minHeight: '100vh', padding: 24,
-    }}>
-      <div style={{ maxWidth: 900, margin: '0 auto' }}>
-        <div style={{ marginBottom: 24 }}>
-          <a href="/manage" style={{ fontSize: 13, color: '#8B8599', textDecoration: 'none' }}>← Back to manage</a>
-          <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 28, fontWeight: 700, color: '#1A1A2E', margin: '4px 0 6px' }}>
-            Ideas
-          </h1>
-          <p style={{ fontSize: 14, color: '#8B8599', margin: 0 }}>
-            Random thoughts, wishlist items, things to remember. Less structured than tasks.
-          </p>
-        </div>
+    <PageShell>
+      <PageHeader
+        eyebrow={<a href="/manage" style={{ color: 'inherit', textDecoration: 'none' }}>Back to manage</a>}
+        title="Ideas"
+        description="Random thoughts, wishlist items, and things to remember. Less structured than tasks."
+      />
 
-        <div style={{
-          background: '#fff', border: '1px solid #E8E3DB', borderRadius: 12,
-          padding: 20, marginBottom: 20,
-        }}>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
-            <div style={{ flex: '0 0 200px' }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#8B8599', display: 'block', marginBottom: 4 }}>
-                For whom *
-              </label>
-              <select value={owner_id}
-                onChange={e => setOwnerId(e.target.value)}
-                style={{
-                  width: '100%', border: '1.5px solid #E2DDD6', borderRadius: 7,
-                  padding: '9px 10px', fontSize: 14, fontFamily: 'inherit', background: '#fff',
-                }}>
-                <option value="">— Select person —</option>
-                {members.map(m => (
-                  <option key={m.id} value={m.id}>{m.display_name}</option>
-                ))}
-              </select>
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: '#8B8599', display: 'block', marginBottom: 4 }}>
-                Idea *
-              </label>
-              <input value={text}
-                onChange={e => setText(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && owner_id && text.trim()) create() }}
-                placeholder="e.g. Look into ski lessons next winter"
-                style={{
-                  width: '100%', border: '1.5px solid #E2DDD6', borderRadius: 7,
-                  padding: '9px 10px', fontSize: 14, fontFamily: 'inherit',
-                }} />
-            </div>
-            <button onClick={create}
-              disabled={creating || !owner_id || !text.trim()}
-              style={{
-                background: '#C4522A', color: '#fff', border: 'none',
-                borderRadius: 7, padding: '10px 20px', fontSize: 14, fontWeight: 600,
-                cursor: 'pointer', fontFamily: 'inherit',
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                opacity: (creating || !owner_id || !text.trim()) ? 0.5 : 1,
-                whiteSpace: 'nowrap',
-              }}>
-              {creating
-                ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Adding…</>
-                : <><Plus size={14} /> Add</>}
-            </button>
-          </div>
-          {error && (
-            <div style={{ marginTop: 10, fontSize: 13, color: '#DC2626' }}>⚠ {error}</div>
-          )}
+      <Card style={{ marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, alignItems: 'end' }}>
+          <SelectField label="For whom *" value={owner_id} onChange={e => setOwnerId(e.target.value)}>
+            <option value="">Select person</option>
+            {members.map(m => (
+              <option key={m.id} value={m.id}>{m.display_name}</option>
+            ))}
+          </SelectField>
+          <Field
+            label="Idea *"
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && owner_id && text.trim()) create() }}
+            placeholder="e.g. Look into ski lessons next winter"
+          />
+          <Button onClick={create} disabled={creating || !owner_id || !text.trim()}>
+            {creating
+              ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Adding...</>
+              : <><Plus size={14} /> Add</>}
+          </Button>
         </div>
+        {error && <Alert tone="danger" style={{ marginTop: 12 }}>{error}</Alert>}
+      </Card>
 
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#8B8599' }}>
-            <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />
-          </div>
-        ) : grouped.length === 0 ? (
-          <div style={{
-            background: '#fff', border: '1px dashed #DDD8CF', borderRadius: 12,
-            padding: 40, textAlign: 'center', color: '#8B8599', fontSize: 14,
-          }}>
-            No ideas yet. Add one above.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {grouped.map(g => (
-              <div key={g.member.id} style={{
-                background: '#fff', border: '1px solid #E8E3DB', borderRadius: 12,
-                overflow: 'hidden',
-              }}>
+      {loading ? (
+        <LoadingState label="Loading ideas..." />
+      ) : grouped.length === 0 ? (
+        <EmptyState title="No ideas yet">
+          Add one above so it is saved for the right person.
+        </EmptyState>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {grouped.map(g => (
+            <Card key={g.member.id} padded={false} style={{ overflow: 'hidden' }}>
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '12px 16px', borderBottom: '1px solid #F0EDE8',
-                  background: '#FAFAF7',
+                  padding: '12px 16px', borderBottom: '1px solid var(--border)',
+                  background: 'var(--surface-soft)',
                 }}>
                   <span style={{
                     width: 12, height: 12, borderRadius: '50%',
                     background: g.member.color ?? '#888780',
                   }} />
-                  <span style={{ fontSize: 15, fontWeight: 600, color: '#1A1A2E' }}>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
                     {g.member.display_name}
                   </span>
-                  <span style={{ fontSize: 12, color: '#8B8599' }}>
+                  <StatusPill>
                     {g.ideas.length} idea{g.ideas.length === 1 ? '' : 's'}
-                  </span>
+                  </StatusPill>
                 </div>
                 <div>
                   {g.ideas.map(i => (
                     <div key={i.id} style={{
                       display: 'flex', alignItems: 'center', gap: 12,
-                      padding: '10px 16px', borderBottom: '1px solid #F0EDE8',
+                      padding: '10px 16px', borderBottom: '1px solid var(--border)',
                     }}>
-                      <div style={{ flex: 1, fontSize: 14, color: '#1A1A2E' }}>{i.text}</div>
-                      <button onClick={() => remove(i.id)}
-                        title="Delete"
-                        style={{
-                          background: 'none', border: 'none', cursor: 'pointer',
-                          color: '#C4B8A8', padding: 6, display: 'flex',
-                        }}>
+                      <div style={{ flex: 1, fontSize: 14, color: 'var(--text)' }}>{i.text}</div>
+                      <IconButton label={`Delete idea: ${i.text}`} onClick={() => remove(i.id)}>
                         <Trash2 size={14} />
-                      </button>
+                      </IconButton>
                     </div>
                   ))}
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </PageShell>
   )
 }

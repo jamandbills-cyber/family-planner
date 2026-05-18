@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { Project, Task } from '@/lib/types/dashboard'
+import { Alert, Button, Card, Field, IconButton, PageHeader, PageShell, SelectField, StatusPill } from '@/components/ui'
 
 type Member = { id: string; display_name: string; color: string | null }
 
@@ -90,73 +91,60 @@ export default function ProjectsAdminClient({ initialProjects, initialTasks, mem
     else setErrMsg(data.error ?? 'Failed to delete task')
   }
 
-  const inputS: React.CSSProperties = {
-    padding: '8px 10px', fontSize: 13, border: '1px solid #DDD8CF',
-    borderRadius: 6, fontFamily: 'inherit',
-  }
-
   return (
-    <div style={{ maxWidth: 900, margin: '40px auto', padding: 24, fontFamily: "'DM Sans', sans-serif" }}>
-      <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, marginBottom: 24 }}>
-        Projects
-      </h1>
-      {errMsg && <div style={{ color: '#DC2626', fontSize: 13, marginBottom: 12 }}>{errMsg}</div>}
+    <PageShell>
+      <PageHeader
+        title="Projects"
+        description="Group related tasks and decide whether a project appears for one person or the whole family."
+        actions={!adding && <Button onClick={() => setAdding(true)}>Add project</Button>}
+      />
+      {errMsg && <Alert tone="danger" style={{ marginBottom: 16 }}>{errMsg}</Alert>}
 
-      {projects.map(p => {
-        const ownerMember = members.find(m => m.id === p.owner_id)
-        const myTasks = tasks.filter(t => t.project_id === p.id)
-        return (
-          <ProjectCard
-            key={p.id}
-            project={p}
-            tasks={myTasks}
-            members={members}
-            ownerName={ownerMember?.display_name ?? p.owner_id}
-            onUpdate={(patch) => updateProject(p.id, patch)}
-            onArchive={() => archiveProject(p.id)}
-            onAddTask={(text, ownerId, dueDate) => addTask(p.id, text, ownerId, dueDate)}
-            onCompleteTask={completeTask}
-            onDeleteTask={deleteTask}
-          />
-        )
-      })}
+      <div style={{ display: 'grid', gap: 14 }}>
+        {projects.map(p => {
+          const ownerMember = members.find(m => m.id === p.owner_id)
+          const myTasks = tasks.filter(t => t.project_id === p.id)
+          return (
+            <ProjectCard
+              key={p.id}
+              project={p}
+              tasks={myTasks}
+              members={members}
+              ownerName={ownerMember?.display_name ?? p.owner_id}
+              onUpdate={(patch) => updateProject(p.id, patch)}
+              onArchive={() => archiveProject(p.id)}
+              onAddTask={(text, ownerId, dueDate) => addTask(p.id, text, ownerId, dueDate)}
+              onCompleteTask={completeTask}
+              onDeleteTask={deleteTask}
+            />
+          )
+        })}
+      </div>
 
       {adding ? (
-        <form action={addProject} style={{ background: '#F7F4EF', padding: 16, borderRadius: 8, marginTop: 16 }}>
-          <h3 style={{ fontSize: 14, marginBottom: 12 }}>New project</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 1fr', gap: 12 }}>
-            <input name="name" placeholder="Project name" required style={inputS} />
-            <input name="color" type="color" defaultValue="#7F77DD" style={{ ...inputS, padding: 4 }} />
-            <select name="owner_id" required style={inputS}>
+        <Card style={{ marginTop: 16 }}>
+          <form action={addProject}>
+            <h2 style={{ color: 'var(--text)', fontFamily: "'Playfair Display', serif", fontSize: 20, marginBottom: 12 }}>New project</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+              <Field name="name" label="Project name" required />
+              <Field name="color" label="Color" type="color" defaultValue="#7F77DD" style={{ padding: 4, height: 42 }} />
+              <SelectField name="owner_id" label="Owner" required>
               <option value="">Owner...</option>
               {members.map(m => <option key={m.id} value={m.id}>{m.display_name}</option>)}
-            </select>
-          </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 13 }}>
-            <input type="checkbox" name="is_shared" />
-            Shared (shows on every family dashboard)
-          </label>
-          {errMsg && <div style={{ color: '#DC2626', fontSize: 13, marginTop: 8 }}>{errMsg}</div>}
-          <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-            <button type="submit" style={{ padding: '8px 16px', background: '#C4522A', color: '#fff',
-              border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              Add project
-            </button>
-            <button type="button" onClick={() => { setAdding(false); setErrMsg('') }}
-              style={{ padding: '8px 16px', background: '#fff', border: '1px solid #DDD8CF',
-                       borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>
-              Cancel
-            </button>
-          </div>
-        </form>
-      ) : (
-        <button onClick={() => setAdding(true)}
-          style={{ marginTop: 16, padding: '10px 16px', background: '#1A1A2E', color: '#fff',
-                   border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-          + Add project
-        </button>
-      )}
-    </div>
+              </SelectField>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
+              <input type="checkbox" name="is_shared" />
+              Shared (shows on every family dashboard)
+            </label>
+            <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Button type="submit">Add project</Button>
+              <Button variant="secondary" onClick={() => { setAdding(false); setErrMsg('') }}>Cancel</Button>
+            </div>
+          </form>
+        </Card>
+      ) : null}
+    </PageShell>
   )
 }
 
@@ -168,34 +156,31 @@ function ProjectCard({ project, tasks, members, ownerName, onUpdate, onArchive,
   const [newTaskDate, setNewTaskDate] = useState('')
 
   return (
-    <div style={{
-      background: '#fff', border: '1px solid #E2DDD6', borderRadius: 10,
-      padding: 14, marginBottom: 12,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
         <input type="color" defaultValue={project.color ?? '#888'}
           onBlur={e => onUpdate({ color: e.target.value })}
-          style={{ width: 28, height: 28, border: 'none', borderRadius: 4, cursor: 'pointer', padding: 0 }} />
+          aria-label={`${project.name} color`}
+          style={{ width: 30, height: 30, border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', padding: 0 }} />
         <input defaultValue={project.name}
           onBlur={e => onUpdate({ name: e.target.value })}
           style={{ flex: 1, padding: '6px 8px', fontSize: 14, fontWeight: 500,
-                   border: '1px solid transparent', borderRadius: 4, fontFamily: 'inherit' }} />
-        <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, color: '#4A4A5A' }}>
+                   border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontFamily: 'inherit', minWidth: 180 }} />
+        <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)' }}>
           <input type="checkbox" defaultChecked={project.is_shared}
             onChange={e => onUpdate({ is_shared: e.target.checked })} />
           shared
         </label>
-        <span style={{ fontSize: 11, color: '#8B8599' }}>owner: {ownerName}</span>
-        <button onClick={onArchive}
-          style={{ fontSize: 12, color: '#DC2626', background: 'none', border: 'none', cursor: 'pointer' }}>
+        <StatusPill>{ownerName}</StatusPill>
+        <Button variant="ghost" onClick={onArchive} style={{ color: 'var(--danger)' }}>
           Archive
-        </button>
+        </Button>
       </div>
 
       {/* Tasks */}
       <div style={{ paddingLeft: 8, fontSize: 13 }}>
         {tasks.length === 0 ? (
-          <div style={{ color: '#A8A39B', fontSize: 12, fontStyle: 'italic', marginBottom: 8 }}>
+          <div style={{ color: 'var(--muted)', fontSize: 12, fontStyle: 'italic', marginBottom: 8 }}>
             No tasks yet
           </div>
         ) : (
@@ -204,22 +189,22 @@ function ProjectCard({ project, tasks, members, ownerName, onUpdate, onArchive,
             return (
               <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
                 <button onClick={() => onCompleteTask(t.id)}
-                  title="Mark complete"
-                  style={{ width: 16, height: 16, border: '1.5px solid #DDD8CF', borderRadius: 3,
-                           background: '#fff', cursor: 'pointer', padding: 0 }} />
+                  aria-label={`Mark ${t.text} complete`}
+                  title={`Mark ${t.text} complete`}
+                  style={{ width: 16, height: 16, border: '1.5px solid var(--border-strong)', borderRadius: 3,
+                           background: 'var(--surface)', cursor: 'pointer', padding: 0, flexShrink: 0 }} />
                 <span style={{ flex: 1 }}>{t.text}</span>
                 {t.due_date && (
-                  <span style={{ fontSize: 11, color: '#C4522A' }}>
+                  <span style={{ fontSize: 11, color: 'var(--accent)' }}>
                     {new Date(t.due_date).toLocaleDateString()}
                   </span>
                 )}
-                <span style={{ fontSize: 11, color: '#8B8599' }}>
+                <span style={{ fontSize: 11, color: 'var(--muted)' }}>
                   {owner?.display_name ?? t.owner_id}
                 </span>
-                <button onClick={() => onDeleteTask(t.id)}
-                  style={{ fontSize: 11, color: '#DC2626', background: 'none', border: 'none', cursor: 'pointer' }}>
+                <IconButton label={`Delete ${t.text}`} onClick={() => onDeleteTask(t.id)} style={{ minHeight: 28, minWidth: 28, color: 'var(--danger)' }}>
                   ✕
-                </button>
+                </IconButton>
               </div>
             )
           })
@@ -228,29 +213,29 @@ function ProjectCard({ project, tasks, members, ownerName, onUpdate, onArchive,
 
       {/* New task row */}
       <div style={{
-        display: 'flex', gap: 6, marginTop: 10, paddingTop: 10,
-        borderTop: '0.5px dashed #E2DDD6',
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+        gap: 8, marginTop: 12, paddingTop: 12,
+        borderTop: '1px dashed var(--border)',
       }}>
         <input value={newTaskText} onChange={e => setNewTaskText(e.target.value)}
           placeholder="New task..." style={{ flex: 1, padding: '6px 10px', fontSize: 12,
-            border: '1px solid #DDD8CF', borderRadius: 4, fontFamily: 'inherit' }} />
+            border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-md)', fontFamily: 'inherit' }} />
         <select value={newTaskOwner} onChange={e => setNewTaskOwner(e.target.value)}
-          style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #DDD8CF',
-                   borderRadius: 4, fontFamily: 'inherit' }}>
+          style={{ padding: '6px 8px', fontSize: 12, border: '1px solid var(--border-strong)',
+                   borderRadius: 'var(--radius-md)', fontFamily: 'inherit' }}>
           {members.map((m: Member) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
         </select>
         <input type="date" value={newTaskDate} onChange={e => setNewTaskDate(e.target.value)}
-          style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #DDD8CF',
-                   borderRadius: 4, fontFamily: 'inherit' }} />
-        <button onClick={() => {
+          style={{ padding: '6px 8px', fontSize: 12, border: '1px solid var(--border-strong)',
+                   borderRadius: 'var(--radius-md)', fontFamily: 'inherit' }} />
+        <Button onClick={() => {
           onAddTask(newTaskText, newTaskOwner, newTaskDate || null)
           setNewTaskText(''); setNewTaskDate('')
-        }} style={{ padding: '6px 12px', background: '#1A1A2E', color: '#fff', border: 'none',
-                    borderRadius: 4, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+        }} style={{ padding: '7px 12px', fontSize: 12 }}>
           Add
-        </button>
+        </Button>
       </div>
-    </div>
+    </Card>
   )
 }
 

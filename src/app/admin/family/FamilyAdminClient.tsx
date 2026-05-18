@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { FamilyMember } from '@/lib/types/dashboard'
+import { Alert, Button, Card, Field, PageHeader, PageShell, SelectField, StatusPill } from '@/components/ui'
 
 export default function FamilyAdminClient({ initialMembers }: { initialMembers: FamilyMember[] }) {
   const [members, setMembers] = useState(initialMembers)
@@ -53,106 +54,90 @@ export default function FamilyAdminClient({ initialMembers }: { initialMembers: 
     else setErrMsg(data.error ?? 'Failed to delete member')
   }
 
-  const inputS: React.CSSProperties = {
-    padding: '8px 10px', fontSize: 13, border: '1px solid #DDD8CF',
-    borderRadius: 6, fontFamily: 'inherit',
-  }
-
   return (
-    <div style={{ maxWidth: 1100, margin: '40px auto', padding: 24, fontFamily: "'DM Sans', sans-serif" }}>
-      <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, marginBottom: 24 }}>Family roster</h1>
-      {errMsg && <div style={{ color: '#DC2626', fontSize: 13, marginBottom: 12 }}>{errMsg}</div>}
+    <PageShell size="wide">
+      <PageHeader
+        title="Family roster"
+        description="Manage family members, contact info, dashboard colors, and admin access."
+        actions={!adding && <Button onClick={() => setAdding(true)}>Add member</Button>}
+      />
+      {errMsg && <Alert tone="danger" style={{ marginBottom: 16 }}>{errMsg}</Alert>}
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginBottom: 24 }}>
-        <thead>
-          <tr style={{ borderBottom: '2px solid #E8E3DB', textAlign: 'left' }}>
-            {['Color', 'Username', 'Display name', 'Email', 'Phone', 'Type', 'Role', ''].map(h =>
-              <th key={h} style={{ padding: '10px 8px', fontWeight: 600, color: '#4A4A5A' }}>{h}</th>
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {members.map(m => (
-            <tr key={m.id} style={{ borderBottom: '1px solid #F0EDE7' }}>
-              <td style={{ padding: '8px' }}>
-                <input type="color" value={m.color ?? '#888888'}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14, marginBottom: 24 }}>
+        {members.map(m => (
+          <Card key={m.id}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <input
+                  aria-label={`${m.display_name} color`}
+                  type="color"
+                  value={m.color ?? '#888888'}
                   onChange={e => updateMember(m.id, { color: e.target.value })}
-                  style={{ width: 32, height: 32, border: 'none', borderRadius: 4, cursor: 'pointer', padding: 0 }} />
-              </td>
-              <td style={{ padding: '8px', fontFamily: 'monospace' }}>{m.username}</td>
-              <td style={{ padding: '8px' }}>
-                <input defaultValue={m.display_name}
-                  onBlur={e => updateMember(m.id, { display_name: e.target.value })}
-                  style={{ ...inputS, width: '100%' }} />
-              </td>
-              <td style={{ padding: '8px', fontSize: 12 }}>{m.email}</td>
-              <td style={{ padding: '8px' }}>
-                <input defaultValue={m.phone ?? ''}
-                  onBlur={e => updateMember(m.id, { phone: e.target.value })}
-                  style={{ ...inputS, width: 140 }} />
-              </td>
-              <td style={{ padding: '8px' }}>
-                <select defaultValue={m.type} onChange={e => updateMember(m.id, { type: e.target.value as any })}
-                  style={inputS}>
+                  style={{ width: 34, height: 34, border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', padding: 0, flexShrink: 0 }}
+                />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ color: 'var(--text)', fontSize: 16, fontWeight: 800 }}>{m.display_name}</div>
+                  <div style={{ color: 'var(--muted)', fontFamily: 'monospace', fontSize: 12 }}>{m.username}</div>
+                </div>
+              </div>
+              <StatusPill tone={m.role === 'admin' ? 'info' : 'neutral'}>{m.role}</StatusPill>
+            </div>
+
+            <div style={{ display: 'grid', gap: 12 }}>
+              <Field
+                label="Display name"
+                defaultValue={m.display_name}
+                onBlur={e => updateMember(m.id, { display_name: e.target.value })}
+              />
+              <Field label="Email" value={m.email ?? ''} readOnly />
+              <Field
+                label="Phone"
+                defaultValue={m.phone ?? ''}
+                onBlur={e => updateMember(m.id, { phone: e.target.value })}
+              />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
+                <SelectField label="Type" defaultValue={m.type} onChange={e => updateMember(m.id, { type: e.target.value as any })}>
                   <option value="adult">adult</option>
                   <option value="child">child</option>
-                </select>
-              </td>
-              <td style={{ padding: '8px' }}>
-                <select defaultValue={m.role} onChange={e => updateMember(m.id, { role: e.target.value as any })}
-                  style={inputS}>
+                </SelectField>
+                <SelectField label="Role" defaultValue={m.role} onChange={e => updateMember(m.id, { role: e.target.value as any })}>
                   <option value="member">member</option>
                   <option value="admin">admin</option>
-                </select>
-              </td>
-              <td style={{ padding: '8px' }}>
-                <button onClick={() => deleteMember(m.id)}
-                  style={{ background: 'none', border: 'none', color: '#DC2626', cursor: 'pointer', fontSize: 12 }}>
-                  Delete
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                </SelectField>
+              </div>
+              <Button variant="ghost" onClick={() => deleteMember(m.id)} style={{ color: 'var(--danger)', justifySelf: 'start', paddingLeft: 0 }}>
+                Delete member
+              </Button>
+            </div>
+          </Card>
+        ))}
+      </div>
 
       {adding ? (
-        <form action={addMember} style={{ background: '#F7F4EF', padding: 16, borderRadius: 8 }}>
-          <h3 style={{ fontSize: 14, marginBottom: 12 }}>New member</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-            <input name="id" placeholder="ID (lowercase, e.g. justin)" required style={inputS} />
-            <input name="username" placeholder="Username" required style={inputS} />
-            <input name="display_name" placeholder="Display name" required style={inputS} />
-            <input name="email" type="email" placeholder="Email" required style={inputS} />
-            <input name="phone" placeholder="+18015551234" style={inputS} />
-            <input name="color" type="color" defaultValue="#7F77DD" style={{ ...inputS, padding: 4 }} />
-            <select name="type" required style={inputS} defaultValue="adult">
+        <Card>
+          <form action={addMember}>
+            <h2 style={{ color: 'var(--text)', fontFamily: "'Playfair Display', serif", fontSize: 20, marginBottom: 12 }}>New member</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+              <Field name="id" label="ID" placeholder="lowercase, e.g. justin" required />
+              <Field name="username" label="Username" required />
+              <Field name="display_name" label="Display name" required />
+              <Field name="email" label="Email" type="email" required />
+              <Field name="phone" label="Phone" placeholder="+18015551234" />
+              <Field name="color" label="Color" type="color" defaultValue="#7F77DD" style={{ padding: 4, height: 42 }} />
+              <SelectField name="type" label="Type" required defaultValue="adult">
               <option value="adult">Adult</option><option value="child">Child</option>
-            </select>
-            <select name="role" required style={inputS} defaultValue="member">
+              </SelectField>
+              <SelectField name="role" label="Role" required defaultValue="member">
               <option value="member">Member</option><option value="admin">Admin</option>
-            </select>
-          </div>
-          {errMsg && <div style={{ color: '#DC2626', fontSize: 13, marginTop: 8 }}>{errMsg}</div>}
-          <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-            <button type="submit" style={{ padding: '8px 16px', background: '#C4522A', color: '#fff',
-              border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              Add
-            </button>
-            <button type="button" onClick={() => { setAdding(false); setErrMsg('') }}
-              style={{ padding: '8px 16px', background: '#fff', border: '1px solid #DDD8CF',
-                       borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>
-              Cancel
-            </button>
-          </div>
-        </form>
-      ) : (
-        <button onClick={() => setAdding(true)}
-          style={{ padding: '10px 16px', background: '#1A1A2E', color: '#fff',
-                   border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-          + Add member
-        </button>
-      )}
-    </div>
+              </SelectField>
+            </div>
+            <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Button type="submit">Add member</Button>
+              <Button variant="secondary" onClick={() => { setAdding(false); setErrMsg('') }}>Cancel</Button>
+            </div>
+          </form>
+        </Card>
+      ) : null}
+    </PageShell>
   )
 }
